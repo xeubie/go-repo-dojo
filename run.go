@@ -12,9 +12,15 @@ type RunOpts struct {
 }
 
 var (
-	ErrRepoNotFound     = fmt.Errorf("repo not found")
-	ErrRepoAlreadyExists = fmt.Errorf("repo already exists")
-	ErrHandled          = fmt.Errorf("handled error")
+	ErrRepoNotFound                            = fmt.Errorf("repo not found")
+	ErrRepoAlreadyExists                       = fmt.Errorf("repo already exists")
+	ErrHandled                                 = fmt.Errorf("handled error")
+	ErrAddIndexPathNotFound                    = fmt.Errorf("add index path not found")
+	ErrRemoveIndexPathNotFound                 = fmt.Errorf("remove index path not found")
+	ErrRecursiveOptionRequired                 = fmt.Errorf("recursive option required")
+	ErrCannotRemoveFileWithStagedAndUnstagedChanges = fmt.Errorf("cannot remove file with staged and unstaged changes")
+	ErrCannotRemoveFileWithStagedChanges       = fmt.Errorf("cannot remove file with staged changes")
+	ErrCannotRemoveFileWithUnstagedChanges     = fmt.Errorf("cannot remove file with unstaged changes")
 )
 
 func Run(opts RepoOpts, args []string, cwdPath string, runOpts RunOpts) error {
@@ -47,17 +53,27 @@ func runPrint(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) erro
 	if err == nil {
 		return nil
 	}
-	switch err.Error() {
-	case ErrRepoAlreadyExists.Error():
+	switch err {
+	case ErrRepoAlreadyExists:
 		fmt.Fprintf(runOpts.Err,
 			"repo already exists, dummy.\n"+
 				"two repos in the same directory makes no sense.\n"+
 				"think about it.\n")
-	case ErrRepoNotFound.Error():
+	case ErrRepoNotFound:
 		fmt.Fprintf(runOpts.Err,
 			"repo not found, dummy.\n"+
 				"either you're in the wrong place or you need to make a new one like this:\n\n")
 		PrintHelp(&[]CommandKind{CommandInit}[0], runOpts.Err)
+	case ErrAddIndexPathNotFound:
+		fmt.Fprintf(runOpts.Err, "a path you are adding does not exist\n")
+	case ErrRemoveIndexPathNotFound:
+		fmt.Fprintf(runOpts.Err, "a path you are removing does not exist\n")
+	case ErrRecursiveOptionRequired:
+		fmt.Fprintf(runOpts.Err, "to do this on a dir, add the -r flag\n")
+	case ErrCannotRemoveFileWithStagedAndUnstagedChanges,
+		ErrCannotRemoveFileWithStagedChanges,
+		ErrCannotRemoveFileWithUnstagedChanges:
+		fmt.Fprintf(runOpts.Err, "a file has uncommitted changes. if you really want to do it, throw caution into the wind by adding the -f flag.\n")
 	default:
 		return err
 	}
@@ -83,6 +99,50 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 				"    repodojo config add user.name foo\n"+
 				"    repodojo config add user.email foo@bar\n")
 		return nil
+
+	case CommandAdd:
+		repo, err := OpenRepo(cwdPath, opts)
+		if err != nil {
+			return ErrRepoNotFound
+		}
+		defer repo.Close()
+		return repo.Add(cmd.Add.Paths)
+
+	case CommandUnadd:
+		repo, err := OpenRepo(cwdPath, opts)
+		if err != nil {
+			return ErrRepoNotFound
+		}
+		defer repo.Close()
+		return repo.Unadd(cmd.Unadd.Paths, cmd.Unadd.Opts)
+
+	case CommandUntrack:
+		repo, err := OpenRepo(cwdPath, opts)
+		if err != nil {
+			return ErrRepoNotFound
+		}
+		defer repo.Close()
+		return repo.Untrack(cmd.Untrack.Paths, cmd.Untrack.Force, cmd.Untrack.Recursive)
+
+	case CommandRm:
+		repo, err := OpenRepo(cwdPath, opts)
+		if err != nil {
+			return ErrRepoNotFound
+		}
+		defer repo.Close()
+		return repo.Remove(cmd.Rm.Paths, cmd.Rm.Opts)
+
+	case CommandCommit:
+		repo, err := OpenRepo(cwdPath, opts)
+		if err != nil {
+			return ErrRepoNotFound
+		}
+		defer repo.Close()
+		_, err = repo.Commit(CommitMetadata{
+			Message: cmd.Commit.Message,
+			AllowEmpty: cmd.Commit.AllowEmpty,
+		})
+		return err
 	}
 	return fmt.Errorf("unknown command")
 }

@@ -10,14 +10,29 @@ type CommandKind int
 
 const (
 	CommandInit CommandKind = iota
+	CommandAdd
+	CommandUnadd
+	CommandUntrack
+	CommandRm
+	CommandCommit
 )
 
 var commandNames = map[CommandKind]string{
-	CommandInit: "init",
+	CommandInit:    "init",
+	CommandAdd:     "add",
+	CommandUnadd:   "unadd",
+	CommandUntrack: "untrack",
+	CommandRm:      "rm",
+	CommandCommit:  "commit",
 }
 
 var commandDescrips = map[CommandKind]string{
-	CommandInit: "create an empty repository.",
+	CommandInit:    "create an empty repository.",
+	CommandAdd:     "add file contents to the index.",
+	CommandUnadd:   "remove any changes to a file that were added to the index.",
+	CommandUntrack: "no longer track file in the index, but leave it in the work dir.",
+	CommandRm:      "no longer track file in the index *and* remove it from the work dir.",
+	CommandCommit:  "create a new commit.",
 }
 
 var commandExamples = map[CommandKind]string{
@@ -25,6 +40,14 @@ var commandExamples = map[CommandKind]string{
     repodojo init
 in a new dir:
     repodojo init myproject`,
+	CommandAdd: `repodojo add myfile.txt`,
+	CommandUnadd: `repodojo unadd myfile.txt
+repodojo unadd -r mydir`,
+	CommandUntrack: `repodojo untrack myfile.txt
+repodojo untrack -r mydir`,
+	CommandRm: `repodojo rm myfile.txt
+repodojo rm -r mydir`,
+	CommandCommit: `repodojo commit -m "my commit message"`,
 }
 
 // valueFlags are flags that can have a value associated with them.
@@ -97,13 +120,60 @@ func (ca *CommandArgs) Contains(arg string) bool {
 	return ok
 }
 
+// Get returns (value, true) if the flag is present. value may be "" if
+// the flag was present but had no associated value.
+// Returns ("", false) if the flag is not present.
+func (ca *CommandArgs) Get(arg string) (string, bool) {
+	delete(ca.UnusedArgs, arg)
+	val, ok := ca.MapArgs[arg]
+	if !ok {
+		return "", false
+	}
+	if val == nil {
+		return "", true // flag present but no value
+	}
+	return *val, true
+}
+
+var ErrCommitMessageNotFound = fmt.Errorf("commit message not found")
+
 type InitCommand struct {
 	Dir string
 }
 
+type AddCommand struct {
+	Paths []string
+}
+
+type UnaddCommand struct {
+	Paths []string
+	Opts  UnaddOptions
+}
+
+type UntrackCommand struct {
+	Paths     []string
+	Force     bool
+	Recursive bool
+}
+
+type RmCommand struct {
+	Paths []string
+	Opts  RemoveOptions
+}
+
+type CommitCommand struct {
+	Message    string
+	AllowEmpty bool
+}
+
 type Command struct {
-	Kind CommandKind
-	Init *InitCommand
+	Kind    CommandKind
+	Init    *InitCommand
+	Add     *AddCommand
+	Unadd   *UnaddCommand
+	Untrack *UntrackCommand
+	Rm      *RmCommand
+	Commit  *CommitCommand
 }
 
 func parseCommand(cmdArgs *CommandArgs) *Command {
@@ -118,6 +188,60 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			return &Command{Kind: CommandInit, Init: &InitCommand{Dir: cmdArgs.PositionalArgs[0]}}
 		}
 		return nil
+
+	case CommandAdd:
+		if len(cmdArgs.PositionalArgs) == 0 {
+			return nil
+		}
+		return &Command{Kind: CommandAdd, Add: &AddCommand{Paths: cmdArgs.PositionalArgs}}
+
+	case CommandUnadd:
+		if len(cmdArgs.PositionalArgs) == 0 {
+			return nil
+		}
+		return &Command{Kind: CommandUnadd, Unadd: &UnaddCommand{
+			Paths: cmdArgs.PositionalArgs,
+			Opts:  UnaddOptions{Recursive: cmdArgs.Contains("-r")},
+		}}
+
+	case CommandUntrack:
+		if len(cmdArgs.PositionalArgs) == 0 {
+			return nil
+		}
+		return &Command{Kind: CommandUntrack, Untrack: &UntrackCommand{
+			Paths:     cmdArgs.PositionalArgs,
+			Force:     cmdArgs.Contains("-f"),
+			Recursive: cmdArgs.Contains("-r"),
+		}}
+
+	case CommandRm:
+		if len(cmdArgs.PositionalArgs) == 0 {
+			return nil
+		}
+		return &Command{Kind: CommandRm, Rm: &RmCommand{
+			Paths: cmdArgs.PositionalArgs,
+			Opts: RemoveOptions{
+				Force:         cmdArgs.Contains("-f"),
+				Recursive:     cmdArgs.Contains("-r"),
+				UpdateWorkDir: true,
+			},
+		}}
+
+	case CommandCommit:
+		if len(cmdArgs.PositionalArgs) > 0 {
+			return nil
+		}
+		var message string
+		if val, ok := cmdArgs.Get("-m"); ok {
+			if val == "" {
+				return nil // -m present but no value — error
+			}
+			message = val
+		}
+		return &Command{Kind: CommandCommit, Commit: &CommitCommand{
+			Message:    message,
+			AllowEmpty: cmdArgs.Contains("--allow-empty"),
+		}}
 	}
 	return nil
 }
@@ -167,19 +291,51 @@ func NewDispatch(cmdArgs *CommandArgs) *Dispatch {
 	return &Dispatch{Kind: DispatchHelp}
 }
 
+func maxCommandNameLen() int {
+	max := 0
+	for _, name := range commandNames {
+		if len(name) > max {
+			max = len(name)
+		}
+	}
+	return max
+}
+
+func printAligned(w io.Writer, name, text string, indent int) {
+	fmt.Fprintf(w, "%s", name)
+	for i := len(name); i < indent; i++ {
+		fmt.Fprintf(w, " ")
+	}
+	lines := strings.Split(text, "\n")
+	fmt.Fprintf(w, "%s\n", lines[0])
+	for _, line := range lines[1:] {
+		for i := 0; i < indent; i++ {
+			fmt.Fprintf(w, " ")
+		}
+		fmt.Fprintf(w, "%s\n", line)
+	}
+}
+
 func PrintHelp(cmdKind *CommandKind, w io.Writer) {
+	indent := maxCommandNameLen() + 2
+
 	if cmdKind != nil {
 		name := commandNames[*cmdKind]
 		descrip := commandDescrips[*cmdKind]
 		example := commandExamples[*cmdKind]
-		fmt.Fprintf(w, "%s  %s\n\n", name, descrip)
+		printAligned(w, name, descrip, indent)
+		fmt.Fprintf(w, "\n")
 		for _, line := range strings.Split(example, "\n") {
-			fmt.Fprintf(w, "    %s\n", line)
+			for i := 0; i < indent; i++ {
+				fmt.Fprintf(w, " ")
+			}
+			fmt.Fprintf(w, "%s\n", line)
 		}
 	} else {
 		fmt.Fprintf(w, "help: repodojo <command> [<args>]\n\n")
-		for kind, name := range commandNames {
-			fmt.Fprintf(w, "%s  %s\n", name, commandDescrips[kind])
+		for kind := CommandInit; kind <= CommandCommit; kind++ {
+			name := commandNames[kind]
+			printAligned(w, name, commandDescrips[kind], indent)
 		}
 	}
 }

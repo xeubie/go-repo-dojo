@@ -171,12 +171,22 @@ func (idx *Index) addEntry(entry *IndexEntry) {
 }
 
 // AddPath adds a file from the working directory to the index.
+// If the file doesn't exist on disk but is in the index, it gets removed.
 func (idx *Index) AddPath(filePath string) error {
 	repo := idx.repo
 	fullPath := filepath.Join(repo.workPath, filePath)
 
 	info, err := os.Lstat(fullPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			_, inEntries := idx.entries[filePath]
+			inDir := idx.IsDir(filePath)
+			if !inEntries && !inDir {
+				return ErrAddIndexPathNotFound
+			}
+			idx.RemovePath(filePath, nil)
+			return nil
+		}
 		return err
 	}
 
@@ -244,6 +254,72 @@ func (idx *Index) AddPath(filePath string) error {
 
 	idx.addEntry(entry)
 	return nil
+}
+
+// RemovePath removes a path (or all paths under a directory) from the index.
+// If removedPaths is non-nil, removed paths are recorded in it.
+func (idx *Index) RemovePath(filePath string, removedPaths map[string]bool) {
+	// check if it's a direct entry
+	if _, ok := idx.entries[filePath]; ok {
+		delete(idx.entries, filePath)
+		if removedPaths != nil {
+			removedPaths[filePath] = true
+		}
+	}
+
+	// check if it's a directory prefix — remove all entries under it
+	if paths, ok := idx.dirToPaths[filePath]; ok {
+		for p := range paths {
+			if _, ok := idx.entries[p]; ok {
+				delete(idx.entries, p)
+				if removedPaths != nil {
+					removedPaths[p] = true
+				}
+			}
+		}
+	}
+
+	// rebuild directory maps
+	idx.rebuildDirMaps()
+}
+
+// IsDir returns true if the given path is a directory in the index.
+func (idx *Index) IsDir(filePath string) bool {
+	_, ok := idx.dirToPaths[filePath]
+	return ok
+}
+
+func (idx *Index) rebuildDirMaps() {
+	idx.dirToPaths = make(map[string]map[string]bool)
+	idx.dirToChildren = make(map[string]map[string]bool)
+	idx.rootChildren = make(map[string]bool)
+
+	for p, entries := range idx.entries {
+		for _, e := range entries {
+			if e != nil {
+				child := path.Base(p)
+				parentPath := path.Dir(p)
+
+				for parentPath != "." && parentPath != "" {
+					if _, ok := idx.dirToChildren[parentPath]; !ok {
+						idx.dirToChildren[parentPath] = make(map[string]bool)
+					}
+					idx.dirToChildren[parentPath][child] = true
+
+					if _, ok := idx.dirToPaths[parentPath]; !ok {
+						idx.dirToPaths[parentPath] = make(map[string]bool)
+					}
+					idx.dirToPaths[parentPath][p] = true
+
+					child = path.Base(parentPath)
+					parentPath = path.Dir(parentPath)
+				}
+
+				idx.rootChildren[child] = true
+				break // only need one non-nil entry per path
+			}
+		}
+	}
 }
 
 // Write serializes the index to the given file (typically a lock file).

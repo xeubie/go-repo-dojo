@@ -70,11 +70,18 @@ func InitRepo(workPath string, opts RepoOpts) (*Repo, error) {
 }
 
 func OpenRepo(workPath string, opts RepoOpts) (*Repo, error) {
-	gitDir := filepath.Join(workPath, ".git")
-	if _, err := os.Stat(gitDir); err != nil {
-		return nil, fmt.Errorf("not a git repository: %s", workPath)
+	dir := workPath
+	for {
+		gitDir := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitDir); err == nil {
+			return &Repo{opts: opts, workPath: dir, repoDir: gitDir}, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return nil, ErrRepoNotFound
+		}
+		dir = parent
 	}
-	return &Repo{opts: opts, workPath: workPath, repoDir: gitDir}, nil
 }
 
 func (r *Repo) Close() error {
@@ -107,6 +114,22 @@ func (r *Repo) AddConfig(input AddConfigInput) error {
 
 func (r *Repo) Add(paths []string) error {
 	return r.addPaths(paths)
+}
+
+func (r *Repo) Unadd(paths []string, opts UnaddOptions) error {
+	return r.unaddPaths(paths, opts)
+}
+
+func (r *Repo) Untrack(paths []string, force, recursive bool) error {
+	return r.removePaths(paths, RemoveOptions{
+		Force:         force,
+		Recursive:     recursive,
+		UpdateWorkDir: false,
+	})
+}
+
+func (r *Repo) Remove(paths []string, opts RemoveOptions) error {
+	return r.removePaths(paths, opts)
 }
 
 func (r *Repo) Commit(metadata CommitMetadata) (string, error) {
