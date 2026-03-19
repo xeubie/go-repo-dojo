@@ -2,6 +2,7 @@ package gitgonano
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -69,8 +70,32 @@ func InitRepo(workPath string, opts RepoOpts) (*Repo, error) {
 	return repo, nil
 }
 
+func OpenRepo(workPath string, opts RepoOpts) (*Repo, error) {
+	gitDir := filepath.Join(workPath, ".git")
+	if _, err := os.Stat(gitDir); err != nil {
+		return nil, fmt.Errorf("not a git repository: %s", workPath)
+	}
+	return &Repo{opts: opts, workPath: workPath, repoDir: gitDir}, nil
+}
+
 func (r *Repo) Close() error {
 	return nil
+}
+
+func (r *Repo) RepoDir() string  { return r.repoDir }
+func (r *Repo) WorkPath() string { return r.workPath }
+func (r *Repo) Opts() RepoOpts   { return r.opts }
+
+func (r *Repo) ReadRef(ref Ref) (string, error) {
+	refPath := ref.ToPath()
+	result, err := ReadRef(r.repoDir, refPath)
+	if err != nil {
+		return "", err
+	}
+	if result == nil {
+		return "", nil
+	}
+	return ReadRefRecur(r.repoDir, *result)
 }
 
 func (r *Repo) AddConfig(input AddConfigInput) error {

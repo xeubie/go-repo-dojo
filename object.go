@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -567,4 +568,494 @@ func WriteTagObject(repoDir, workPath string, opts RepoOpts, input AddTagInput, 
 	}
 
 	return hex.EncodeToString(oidBytes), nil
+}
+
+// ---------------------------------------------------------------------------
+// ObjectReader – streaming reader for a single git object
+// ---------------------------------------------------------------------------
+
+type ObjectReader struct {
+	repoDir  string
+	hashKind HashKind
+	inner    *LooseOrPackObjectReader
+}
+
+func NewObjectReader(repoDir string, hashKind HashKind, oidHex string) (*ObjectReader, error) {
+	inner, err := NewLooseOrPackObjectReader(repoDir, hashKind, oidHex)
+	if err != nil {
+		return nil, err
+	}
+	return &ObjectReader{repoDir: repoDir, hashKind: hashKind, inner: inner}, nil
+}
+
+func (r *ObjectReader) Close() {
+	r.inner.Close()
+}
+
+func (r *ObjectReader) Header() ObjectHeader {
+	return r.inner.Header()
+}
+
+func (r *ObjectReader) Reset() error {
+	return r.inner.Reset()
+}
+
+func (r *ObjectReader) Read(p []byte) (int, error) {
+	return r.inner.Read(p)
+}
+
+// ---------------------------------------------------------------------------
+// Parsed object content types
+// ---------------------------------------------------------------------------
+
+type CommitContent struct {
+	Tree       string   // hex OID of tree
+	ParentOIDs []string // hex OIDs of parents
+	Author     string
+	Committer  string
+	Message    string
+}
+
+type TreeContentEntry struct {
+	Name string
+	Mode Mode
+	OID  []byte // raw bytes
+}
+
+type TreeContent struct {
+	Entries []TreeContentEntry
+}
+
+type TagContent struct {
+	Target  string // hex OID
+	Kind    ObjectKind
+	Name    string
+	Tagger  string
+	Message string
+}
+
+// ---------------------------------------------------------------------------
+// Object – a fully or partially parsed git object
+// ---------------------------------------------------------------------------
+
+type Object struct {
+	OID  string // hex
+	Kind ObjectKind
+	Size uint64
+
+	// Full-mode parsed content (nil for raw mode)
+	Commit *CommitContent
+	Tree   *TreeContent
+	Tag    *TagContent
+
+	reader *ObjectReader
+}
+
+func NewObject(repoDir string, hashKind HashKind, oidHex string, full bool) (*Object, error) {
+	rdr, err := NewObjectReader(repoDir, hashKind, oidHex)
+	if err != nil {
+		return nil, err
+	}
+	header := rdr.Header()
+
+	obj := &Object{
+		OID:    oidHex,
+		Kind:   header.Kind,
+		Size:   header.Size,
+		reader: rdr,
+	}
+
+	if full {
+		if err := obj.parseContent(hashKind); err != nil {
+			rdr.Close()
+			return nil, err
+		}
+	}
+
+	return obj, nil
+}
+
+func (o *Object) Close() {
+	if o.reader != nil {
+		o.reader.Close()
+	}
+}
+
+func (o *Object) parseContent(hashKind HashKind) error {
+	switch o.Kind {
+	case ObjectKindBlob:
+		return nil
+	case ObjectKindTree:
+		return o.parseTree(hashKind)
+	case ObjectKindCommit:
+		return o.parseCommit(hashKind)
+	case ObjectKindTag:
+		return o.parseTag(hashKind)
+	}
+	return nil
+}
+
+func (o *Object) parseTree(hashKind HashKind) error {
+	data, err := io.ReadAll(o.reader)
+	if err != nil {
+		return err
+	}
+	byteLen := hashKind.ByteLen()
+	var entries []TreeContentEntry
+	pos := 0
+	for pos < len(data) {
+		// find space (separates mode from name)
+		spIdx := bytes.IndexByte(data[pos:], ' ')
+		if spIdx < 0 {
+			return errors.New("invalid tree entry: no space")
+		}
+		modeStr := string(data[pos : pos+spIdx])
+		pos += spIdx + 1
+
+		// find null (separates name from OID)
+		nullIdx := bytes.IndexByte(data[pos:], 0)
+		if nullIdx < 0 {
+			return errors.New("invalid tree entry: no null")
+		}
+		name := string(data[pos : pos+nullIdx])
+		pos += nullIdx + 1
+
+		if pos+byteLen > len(data) {
+			return errors.New("invalid tree entry: truncated OID")
+		}
+		oid := make([]byte, byteLen)
+		copy(oid, data[pos:pos+byteLen])
+		pos += byteLen
+
+		modeVal, err := strconv.ParseUint(modeStr, 8, 32)
+		if err != nil {
+			return fmt.Errorf("invalid tree entry mode: %w", err)
+		}
+
+		entries = append(entries, TreeContentEntry{
+			Name: name,
+			Mode: Mode(modeVal),
+			OID:  oid,
+		})
+	}
+	o.Tree = &TreeContent{Entries: entries}
+	return nil
+}
+
+func (o *Object) parseCommit(hashKind HashKind) error {
+	data, err := io.ReadAll(o.reader)
+	if err != nil {
+		return err
+	}
+	content := string(data)
+	cc := &CommitContent{}
+
+	// split headers from message at double newline
+	parts := strings.SplitN(content, "\n\n", 2)
+	headerSection := parts[0]
+	if len(parts) > 1 {
+		cc.Message = strings.TrimRight(parts[1], "\n")
+	}
+
+	lines := strings.Split(headerSection, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "tree ") {
+			cc.Tree = line[5:]
+		} else if strings.HasPrefix(line, "parent ") {
+			cc.ParentOIDs = append(cc.ParentOIDs, line[7:])
+		} else if strings.HasPrefix(line, "author ") {
+			cc.Author = line[7:]
+		} else if strings.HasPrefix(line, "committer ") {
+			cc.Committer = line[10:]
+		}
+		// skip gpgsig and other headers
+	}
+
+	o.Commit = cc
+	return nil
+}
+
+func (o *Object) parseTag(hashKind HashKind) error {
+	data, err := io.ReadAll(o.reader)
+	if err != nil {
+		return err
+	}
+	content := string(data)
+	tc := &TagContent{}
+
+	parts := strings.SplitN(content, "\n\n", 2)
+	headerSection := parts[0]
+	if len(parts) > 1 {
+		tc.Message = parts[1]
+	}
+
+	lines := strings.Split(headerSection, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "object ") {
+			tc.Target = line[7:]
+		} else if strings.HasPrefix(line, "type ") {
+			k, err := ObjectKindFromName(line[5:])
+			if err == nil {
+				tc.Kind = k
+			}
+		} else if strings.HasPrefix(line, "tag ") {
+			tc.Name = line[4:]
+		} else if strings.HasPrefix(line, "tagger ") {
+			tc.Tagger = line[7:]
+		}
+	}
+
+	o.Tag = tc
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// ObjectIterator – graph-walking iterator over reachable objects
+// ---------------------------------------------------------------------------
+
+type ObjectIterKind int
+
+const (
+	ObjectIterAll    ObjectIterKind = iota
+	ObjectIterCommit
+)
+
+type ObjectIteratorOptions struct {
+	Kind     ObjectIterKind
+	MaxDepth *int
+}
+
+type oidQueueEntry struct {
+	oid   string
+	depth int
+}
+
+type ObjectIterator struct {
+	repoDir  string
+	hashKind HashKind
+	options  ObjectIteratorOptions
+	queue    []oidQueueEntry
+	excludes map[string]bool
+	current  *Object
+}
+
+func NewObjectIterator(repoDir string, hashKind HashKind, opts ObjectIteratorOptions) *ObjectIterator {
+	return &ObjectIterator{
+		repoDir:  repoDir,
+		hashKind: hashKind,
+		options:  opts,
+		excludes: make(map[string]bool),
+	}
+}
+
+func (it *ObjectIterator) Close() {
+	// queue entries are just strings, nothing to free
+}
+
+func (it *ObjectIterator) Include(oidHex string) {
+	it.includeAtDepth(oidHex, 0)
+}
+
+func (it *ObjectIterator) includeAtDepth(oidHex string, depth int) {
+	if it.options.MaxDepth != nil && depth > *it.options.MaxDepth {
+		return
+	}
+	if !it.excludes[oidHex] {
+		it.queue = append(it.queue, oidQueueEntry{oid: oidHex, depth: depth})
+	}
+}
+
+func (it *ObjectIterator) Exclude(oidHex string) error {
+	it.excludes[oidHex] = true
+
+	obj, err := NewObject(it.repoDir, it.hashKind, oidHex, true)
+	if err != nil {
+		return err
+	}
+	defer obj.Close()
+
+	switch obj.Kind {
+	case ObjectKindBlob, ObjectKindTag:
+	case ObjectKindTree:
+		if it.options.Kind == ObjectIterAll && obj.Tree != nil {
+			for _, entry := range obj.Tree.Entries {
+				if entry.Mode.ObjType() == ModeObjectTypeGitlink {
+					continue
+				}
+				entryOIDHex := hex.EncodeToString(entry.OID)
+				if err := it.Exclude(entryOIDHex); err != nil {
+					return err
+				}
+			}
+		}
+	case ObjectKindCommit:
+		if obj.Commit != nil {
+			for _, pid := range obj.Commit.ParentOIDs {
+				it.excludes[pid] = true
+			}
+			if it.options.Kind == ObjectIterAll {
+				if err := it.Exclude(obj.Commit.Tree); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// Next returns the next object in raw mode (reader positioned at content start).
+// The caller must Close the returned Object. Returns nil when done.
+func (it *ObjectIterator) Next() (*Object, error) {
+	for len(it.queue) > 0 {
+		entry := it.queue[0]
+		it.queue = it.queue[1:]
+
+		if it.excludes[entry.oid] {
+			continue
+		}
+		it.excludes[entry.oid] = true
+
+		// open full to discover references
+		fullObj, err := NewObject(it.repoDir, it.hashKind, entry.oid, true)
+		if err != nil {
+			return nil, err
+		}
+
+		it.includeContentRefs(fullObj, entry.depth+1)
+
+		// filter by kind
+		if it.options.Kind == ObjectIterCommit && fullObj.Kind != ObjectKindCommit {
+			fullObj.Close()
+			continue
+		}
+
+		fullObj.Close()
+
+		// re-open as raw
+		rawObj, err := NewObject(it.repoDir, it.hashKind, entry.oid, false)
+		if err != nil {
+			return nil, err
+		}
+		return rawObj, nil
+	}
+	return nil, nil
+}
+
+func (it *ObjectIterator) includeContentRefs(obj *Object, childDepth int) {
+	switch obj.Kind {
+	case ObjectKindBlob:
+	case ObjectKindTree:
+		if it.options.Kind == ObjectIterAll && obj.Tree != nil {
+			for _, entry := range obj.Tree.Entries {
+				if entry.Mode.ObjType() == ModeObjectTypeGitlink {
+					continue
+				}
+				it.includeAtDepth(hex.EncodeToString(entry.OID), childDepth)
+			}
+		}
+	case ObjectKindCommit:
+		if obj.Commit != nil {
+			for _, pid := range obj.Commit.ParentOIDs {
+				it.includeAtDepth(pid, childDepth)
+			}
+			if it.options.Kind == ObjectIterAll {
+				it.includeAtDepth(obj.Commit.Tree, childDepth)
+			}
+		}
+	case ObjectKindTag:
+		if obj.Tag != nil {
+			it.includeAtDepth(obj.Tag.Target, childDepth)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// writeObjectFromReader – streaming write of an object to loose storage
+// ---------------------------------------------------------------------------
+
+func writeObjectFromReader(repoDir string, hashKind HashKind, header ObjectHeader, reader io.Reader) ([]byte, error) {
+	headerStr := fmt.Sprintf("%s %d\x00", header.Kind.Name(), header.Size)
+
+	tempFile, err := os.CreateTemp(repoDir, "object.temp.*")
+	if err != nil {
+		return nil, err
+	}
+	tempPath := tempFile.Name()
+	defer os.Remove(tempPath)
+	defer tempFile.Close()
+
+	hasher := hashKind.NewHasher()
+	hasher.Write([]byte(headerStr))
+	if _, err := tempFile.Write([]byte(headerStr)); err != nil {
+		return nil, err
+	}
+
+	w := io.MultiWriter(tempFile, hasher)
+	if _, err := io.Copy(w, reader); err != nil {
+		return nil, err
+	}
+
+	oidBytes := hasher.Sum(nil)
+	oidHex := hex.EncodeToString(oidBytes)
+
+	objDir := filepath.Join(repoDir, "objects", oidHex[:2])
+	objPath := filepath.Join(objDir, oidHex[2:])
+	if _, err := os.Stat(objPath); err == nil {
+		return oidBytes, nil
+	}
+
+	if err := os.MkdirAll(objDir, 0755); err != nil {
+		return nil, err
+	}
+
+	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	lock, err := NewLockFile(objDir, oidHex[2:])
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Close()
+
+	zlibW := zlib.NewWriter(lock.File)
+	if _, err := io.Copy(zlibW, tempFile); err != nil {
+		return nil, err
+	}
+	if err := zlibW.Close(); err != nil {
+		return nil, err
+	}
+
+	lock.Success = true
+	return oidBytes, nil
+}
+
+// ---------------------------------------------------------------------------
+// CopyFromPackIterator – writes pack objects as loose objects
+// ---------------------------------------------------------------------------
+
+func CopyFromPackIterator(repoDir string, hashKind HashKind, iter *PackIterator) error {
+	offsetToOID := make(map[uint64][]byte)
+
+	for {
+		por, err := iter.Next(repoDir, hashKind, offsetToOID)
+		if err != nil {
+			return err
+		}
+		if por == nil {
+			break
+		}
+
+		startPos := iter.StartPosition()
+		header := por.Header()
+
+		oidBytes, err := writeObjectFromReader(repoDir, hashKind, header, por)
+		por.Close()
+		if err != nil {
+			return err
+		}
+
+		offsetToOID[startPos] = oidBytes
+	}
+	return nil
 }
