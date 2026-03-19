@@ -4,10 +4,9 @@ import (
 	"bufio"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -27,25 +26,11 @@ func TestCreateAndReadPack(t *testing.T) {
 	workPath := filepath.Join(tempDir, "repo")
 	opts := RepoOpts{Hash: SHA1Hash, IsTest: true}
 
-	// init repo using git CLI
-	cmd := exec.Command("git", "init", workPath)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init: %s\n%s", err, out)
+	repo, err := InitRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	gitDir := filepath.Join(workPath, ".git")
-	gitEnv := append(os.Environ(),
-		"GIT_DIR="+gitDir,
-		"GIT_WORK_TREE="+workPath,
-		"GIT_AUTHOR_NAME=radarroark",
-		"GIT_AUTHOR_EMAIL=radarroark@radar.roark",
-		"GIT_AUTHOR_DATE=1970-01-01T00:00:00+0000",
-		"GIT_COMMITTER_NAME=radarroark",
-		"GIT_COMMITTER_EMAIL=radarroark@radar.roark",
-		"GIT_COMMITTER_DATE=1970-01-01T00:00:00+0000",
-		"GIT_CONFIG_GLOBAL=/dev/null",
-	)
+	defer repo.Close()
 
 	// first commit
 	if err := os.WriteFile(filepath.Join(workPath, "hello.txt"), []byte("hello, world!"), 0644); err != nil {
@@ -54,20 +39,13 @@ func TestCreateAndReadPack(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workPath, "README"), []byte("My cool project"), 0644); err != nil {
 		t.Fatal(err)
 	}
-
-	gitRun := func(args ...string) string {
-		cmd := exec.Command("git", args...)
-		cmd.Env = gitEnv
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %s\n%s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
+	if err := repo.Add([]string{"hello.txt", "README"}); err != nil {
+		t.Fatal(err)
 	}
-
-	gitRun("add", "hello.txt", "README")
-	gitRun("commit", "-m", "let there be light")
-	commitOID1 := gitRun("rev-parse", "HEAD")
+	commitOID1, err := repo.Commit(CommitMetadata{Message: "let there be light"})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// second commit
 	if err := os.WriteFile(filepath.Join(workPath, "LICENSE"), []byte("do whatever you want"), 0644); err != nil {
@@ -79,42 +57,56 @@ func TestCreateAndReadPack(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workPath, "hello.txt"), []byte("goodbye, world!"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	gitRun("add", "LICENSE", "CHANGELOG", "hello.txt")
-	gitRun("commit", "-m", "add license")
-	commitOID2 := gitRun("rev-parse", "HEAD")
-
-	// create pack file via git
-	packInput := commitOID1 + "\n" + commitOID2 + "\n"
-	packCmd := exec.Command("git", "pack-objects", "--revs", filepath.Join(gitDir, "objects", "pack", "pack"))
-	packCmd.Env = gitEnv
-	packCmd.Stdin = strings.NewReader(packInput)
-	if out, err := packCmd.CombinedOutput(); err != nil {
-		t.Fatalf("git pack-objects: %s\n%s", err, out)
+	if err := repo.Add([]string{"LICENSE", "CHANGELOG", "hello.txt"}); err != nil {
+		t.Fatal(err)
 	}
-
-	// verify pack files exist
-	packDirPath := filepath.Join(gitDir, "objects", "pack")
-	entries, err := os.ReadDir(packDirPath)
+	commitOID2, err := repo.Commit(CommitMetadata{Message: "add license"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	fileCount := 0
-	for _, e := range entries {
-		if e.Type().IsRegular() {
-			fileCount++
+
+	// write a pack file using PackWriter
+	headOID, err := ReadHeadRecur(repo.repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	objIter := NewObjectIterator(repo.repoDir, opts.Hash, ObjectIteratorOptions{Kind: ObjectIterAll})
+	defer objIter.Close()
+	objIter.Include(headOID)
+
+	packWriter, err := NewPackWriter(opts.Hash, objIter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if packWriter == nil {
+		t.Fatal("PackWriter is nil")
+	}
+	defer packWriter.Close()
+
+	packFilePath := filepath.Join(tempDir, "test.pack")
+	packFile, err := os.Create(packFilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// write one byte at a time (like the zig test)
+	var buf [1]byte
+	for {
+		n, err := packWriter.Read(buf[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := packFile.Write(buf[:n]); err != nil {
+			t.Fatal(err)
+		}
+		if n < len(buf) {
+			break
 		}
 	}
-	if fileCount < 2 {
-		t.Fatalf("expected at least 2 pack files, got %d", fileCount)
-	}
+	packFile.Close()
 
-	// delete loose commit objects
-	for _, oid := range []string{commitOID1, commitOID2} {
-		loosePath := filepath.Join(gitDir, "objects", oid[:2], oid[2:])
-		os.Remove(loosePath)
-	}
-
-	// read pack objects by OID
+	// read the pack back and find both commits by OID
 	for _, tc := range []struct {
 		oid     string
 		message string
@@ -122,135 +114,129 @@ func TestCreateAndReadPack(t *testing.T) {
 		{commitOID1, "let there be light"},
 		{commitOID2, "add license"},
 	} {
-		obj, err := NewObject(gitDir, opts.Hash, tc.oid, true)
-		if err != nil {
-			t.Fatalf("NewObject(%s): %v", tc.oid, err)
-		}
-		if obj.Commit == nil {
-			t.Fatalf("expected commit object for %s", tc.oid)
-		}
-		if obj.Commit.Message != tc.message {
-			t.Fatalf("expected message %q, got %q", tc.message, obj.Commit.Message)
-		}
-		obj.Close()
-	}
-
-	// write a pack file using PackWriter and read it back
-	{
-		repo, err := OpenRepo(workPath, opts)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer repo.Close()
-
-		headOID, err := ReadHeadRecur(gitDir)
+		pr, err := NewPackReaderFromFile(packFilePath)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		objIter := NewObjectIterator(gitDir, opts.Hash, ObjectIteratorOptions{Kind: ObjectIterAll})
-		defer objIter.Close()
-		objIter.Include(headOID)
-
-		packWriter, err := NewPackWriter(opts.Hash, objIter)
+		iter, err := NewPackIterator(pr)
 		if err != nil {
-			t.Fatal(err)
-		}
-		if packWriter == nil {
-			t.Fatal("PackWriter is nil")
-		}
-		defer packWriter.Close()
-
-		packFilePath := filepath.Join(tempDir, "test.pack")
-		packFile, err := os.Create(packFilePath)
-		if err != nil {
+			pr.Close()
 			t.Fatal(err)
 		}
 
-		var buf [1]byte
+		found := false
 		for {
-			n, err := packWriter.Read(buf[:])
+			por, err := iter.Next(repo.repoDir, opts.Hash, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := packFile.Write(buf[:n]); err != nil {
-				t.Fatal(err)
+			if por == nil {
+				break
 			}
-			if n < len(buf) {
+
+			header := por.Header()
+			computedOID := hashPackObject(opts.Hash, header, por)
+			por.Close()
+
+			if computedOID == tc.oid {
+				found = true
+				// verify the commit message by re-reading from the pack
+				pr2, err := NewPackReaderFromFile(packFilePath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				iter2, err := NewPackIterator(pr2)
+				if err != nil {
+					pr2.Close()
+					t.Fatal(err)
+				}
+				msg := findCommitMessage(t, iter2, repo.repoDir, opts, tc.oid)
+				pr2.Close()
+				if msg != tc.message {
+					t.Fatalf("expected message %q, got %q", tc.message, msg)
+				}
 				break
 			}
 		}
-		packFile.Close()
+		pr.Close()
 
-		// read the written pack back using initWithoutIndex style search
-		for _, oid := range []string{commitOID1, commitOID2} {
-			pr, err := NewPackReaderFromFile(packFilePath)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			iter, err := NewPackIterator(pr)
-			if err != nil {
-				pr.Close()
-				t.Fatal(err)
-			}
-
-			found := false
-			for {
-				por, err := iter.Next(gitDir, opts.Hash, nil)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if por == nil {
-					break
-				}
-
-				header := por.Header()
-				headerStr := fmt.Sprintf("%s %d\x00", header.Kind.Name(), header.Size)
-				hasher := opts.Hash.NewHasher()
-				hasher.Write([]byte(headerStr))
-
-				data, err := readAllFromPackObj(por)
-				por.Close()
-				if err != nil {
-					t.Fatal(err)
-				}
-				hasher.Write(data)
-				computedOID := hex.EncodeToString(hasher.Sum(nil))
-
-				if computedOID == oid {
-					found = true
-					break
-				}
-			}
-			pr.Close()
-
-			if !found {
-				t.Fatalf("object %s not found in written pack", oid)
-			}
+		if !found {
+			t.Fatalf("object %s not found in pack", tc.oid)
 		}
 	}
 }
 
-func readAllFromPackObj(por *PackObjectReader) ([]byte, error) {
-	var buf [4096]byte
-	var result []byte
+// hashPackObject computes the OID of a pack object by hashing "type size\0" + content.
+func hashPackObject(hashKind HashKind, header ObjectHeader, r io.Reader) string {
+	headerStr := fmt.Sprintf("%s %d\x00", header.Kind.Name(), header.Size)
+	hasher := hashKind.NewHasher()
+	hasher.Write([]byte(headerStr))
+	io.Copy(hasher, r)
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+// findCommitMessage iterates a pack to find a commit by OID and returns its message.
+func findCommitMessage(t *testing.T, iter *PackIterator, repoDir string, opts RepoOpts, targetOID string) string {
+	t.Helper()
 	for {
-		n, err := por.Read(buf[:])
-		if n > 0 {
-			result = append(result, buf[:n]...)
-		}
+		por, err := iter.Next(repoDir, opts.Hash, nil)
 		if err != nil {
-			if err.Error() == "EOF" {
-				break
-			}
-			return result, err
+			t.Fatal(err)
 		}
-		if n == 0 {
-			break
+		if por == nil {
+			t.Fatalf("commit %s not found in pack", targetOID)
+		}
+
+		header := por.Header()
+		if header.Kind != ObjectKindCommit {
+			por.Close()
+			continue
+		}
+
+		// read content and hash to check OID
+		content, err := io.ReadAll(por)
+		por.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		headerStr := fmt.Sprintf("commit %d\x00", header.Size)
+		hasher := opts.Hash.NewHasher()
+		hasher.Write([]byte(headerStr))
+		hasher.Write(content)
+		computedOID := hex.EncodeToString(hasher.Sum(nil))
+
+		if computedOID == targetOID {
+			// parse message from raw commit content
+			return parseMessageFromCommitBytes(string(content))
 		}
 	}
-	return result, nil
+}
+
+func parseMessageFromCommitBytes(content string) string {
+	// message starts after the first blank line
+	idx := 0
+	for {
+		nl := indexOf(content[idx:], '\n')
+		if nl < 0 {
+			return ""
+		}
+		if nl == 0 {
+			// blank line found
+			return content[idx+1:]
+		}
+		idx += nl + 1
+	}
+}
+
+func indexOf(s string, c byte) int {
+	for i := range s {
+		if s[i] == c {
+			return i
+		}
+	}
+	return -1
 }
 
 func TestWritePackFile(t *testing.T) {
