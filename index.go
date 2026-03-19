@@ -1,4 +1,4 @@
-package gitgonano
+package repodojo
 
 import (
 	"bytes"

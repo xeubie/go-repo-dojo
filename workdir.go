@@ -1,4 +1,4 @@
-package gitgonano
+package repodojo
 
 // addPaths stages the given paths by reading them from the work directory,
 // writing blob objects, updating the index, and writing the index file.
