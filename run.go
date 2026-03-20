@@ -304,6 +304,14 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 		}
 		defer repo.Close()
 		return repo.ResetAdd(cmd.ResetAdd.Target)
+
+	case CommandRestore:
+		repo, err := OpenRepo(cwdPath, opts)
+		if err != nil {
+			return ErrRepoNotFound
+		}
+		defer repo.Close()
+		return repo.Restore(cmd.Restore.Path)
 	}
 	return fmt.Errorf("unknown command")
 }

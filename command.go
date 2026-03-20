@@ -22,6 +22,7 @@ const (
 	CommandReset
 	CommandResetDir
 	CommandResetAdd
+	CommandRestore
 )
 
 var commandNames = map[CommandKind]string{
@@ -38,6 +39,7 @@ var commandNames = map[CommandKind]string{
 	CommandReset:    "reset",
 	CommandResetDir: "reset-dir",
 	CommandResetAdd: "reset-add",
+	CommandRestore:  "restore",
 }
 
 var commandDescrips = map[CommandKind]string{
@@ -54,6 +56,7 @@ var commandDescrips = map[CommandKind]string{
 	CommandReset:    "make the current branch point to a new commit id.\nupdates the index, but the files in the work dir are left alone.",
 	CommandResetDir: "make the current branch point to a new commit id.\nupdates both the index and the work dir.\nsimilar to `git reset --hard`.",
 	CommandResetAdd: "make the current branch point to a new commit id.\ndoes not update the index or the work dir.\nsimilar to `git reset --soft`.",
+	CommandRestore:  "restore files in the work dir.",
 }
 
 var commandExamples = map[CommandKind]string{
@@ -96,6 +99,7 @@ reset current branch to point to a new commit id:
     repodojo reset-dir a1b2c3...`,
 	CommandResetAdd: `reset current branch to point to a new commit id:
     repodojo reset-add a1b2c3...`,
+	CommandRestore: `repodojo restore myfile.txt`,
 }
 
 // valueFlags are flags that can have a value associated with them.
@@ -273,6 +277,11 @@ type Command struct {
 	Branch  *BranchCommand
 	Switch   *SwitchCommand
 	ResetAdd *ResetAddCommand
+	Restore  *RestoreCommand
+}
+
+type RestoreCommand struct {
+	Path string
 }
 
 func parseCommand(cmdArgs *CommandArgs) *Command {
@@ -461,6 +470,14 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 		return &Command{Kind: CommandResetAdd, ResetAdd: &ResetAddCommand{
 			Target: *target,
 		}}
+
+	case CommandRestore:
+		if len(cmdArgs.PositionalArgs) != 1 {
+			return nil
+		}
+		return &Command{Kind: CommandRestore, Restore: &RestoreCommand{
+			Path: cmdArgs.PositionalArgs[0],
+		}}
 	}
 	return nil
 }
@@ -552,7 +569,7 @@ func PrintHelp(cmdKind *CommandKind, w io.Writer) {
 		}
 	} else {
 		fmt.Fprintf(w, "help: repodojo <command> [<args>]\n\n")
-		for kind := CommandInit; kind <= CommandResetAdd; kind++ {
+		for kind := CommandInit; kind <= CommandRestore; kind++ {
 			name := commandNames[kind]
 			printAligned(w, name, commandDescrips[kind], indent)
 		}

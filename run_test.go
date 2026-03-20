@@ -900,6 +900,75 @@ func TestRun(t *testing.T) {
 			}
 		}
 	}
+
+	// restore
+	{
+		// there are two modified and two deleted files remaining
+		{
+			repo, err := OpenRepo(workPath, opts)
+			if err != nil {
+				t.Fatalf("open repo failed: %v", err)
+			}
+			st, err := repo.Status()
+			repo.Close()
+			if err != nil {
+				t.Fatalf("status failed: %v", err)
+			}
+			if len(st.WorkDirModified) != 2 {
+				t.Fatalf("work_dir_modified count = %d, want 2: %v", len(st.WorkDirModified), st.WorkDirModified)
+			}
+			if len(st.IndexDeleted) != 2 {
+				t.Fatalf("index_deleted count = %d, want 2: %v", len(st.IndexDeleted), st.IndexDeleted)
+			}
+		}
+
+		err = Run(opts, []string{"restore", "README"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("restore README failed: %v", err)
+		}
+
+		err = Run(opts, []string{"restore", "hello.txt"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("restore hello.txt failed: %v", err)
+		}
+
+		// directories can be restored
+		err = Run(opts, []string{"restore", "src"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("restore src failed: %v", err)
+		}
+
+		// nested paths can be restored
+		err = Run(opts, []string{"restore", "one/two/three.txt"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("restore one/two/three.txt failed: %v", err)
+		}
+
+		// remove changes to index
+		err = Run(opts, []string{"add", "hello.txt", "src", "one"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("add restored files failed: %v", err)
+		}
+
+		// there are no modified or deleted files remaining
+		{
+			repo, err := OpenRepo(workPath, opts)
+			if err != nil {
+				t.Fatalf("open repo failed: %v", err)
+			}
+			st, err := repo.Status()
+			repo.Close()
+			if err != nil {
+				t.Fatalf("status failed: %v", err)
+			}
+			if len(st.WorkDirModified) != 0 {
+				t.Fatalf("work_dir_modified count = %d, want 0: %v", len(st.WorkDirModified), st.WorkDirModified)
+			}
+			if len(st.IndexDeleted) != 0 {
+				t.Fatalf("index_deleted count = %d, want 0: %v", len(st.IndexDeleted), st.IndexDeleted)
+			}
+		}
+	}
 }
 
 func countIndexEntries(idx *Index) int {

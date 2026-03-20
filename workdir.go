@@ -566,6 +566,22 @@ func (repo *Repo) indexDiffersFromWorkDir(entry *IndexEntry, fullPath string) (b
 	return !bytesEqual(entry.oid, oid), nil
 }
 
+// restore restores a file or directory in the work dir from the HEAD tree.
+func (repo *Repo) restore(path string) error {
+	parts := SplitPath(path)
+	oidHex, mode, err := repo.lookupTreeEntry(parts)
+	if err != nil {
+		return fmt.Errorf("object not found: %s", path)
+	}
+
+	oidBytes, err := hex.DecodeString(oidHex)
+	if err != nil {
+		return err
+	}
+
+	return repo.objectToFile(JoinPath(parts), TreeEntry{OID: oidBytes, Mode: mode})
+}
+
 // TreeChange represents a change between two tree entries.
 type TreeChange struct {
 	Old *TreeEntry // nil means added
@@ -967,6 +983,25 @@ func (repo *Repo) objectToFile(path string, te TreeEntry) error {
 	parentDir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(parentDir, 0755); err != nil {
 		return err
+	}
+
+	if te.Mode.ObjType() == ModeObjectTypeTree {
+		obj, err := repo.NewObject(oidHex, true)
+		if err != nil {
+			return err
+		}
+		defer obj.Close()
+		if obj.Tree != nil {
+			for _, e := range obj.Tree.Entries {
+				childPath := path + "/" + e.Name
+				oidCopy := make([]byte, len(e.OID))
+				copy(oidCopy, e.OID)
+				if err := repo.objectToFile(childPath, TreeEntry{OID: oidCopy, Mode: e.Mode}); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	}
 
 	if te.Mode.ObjType() == ModeObjectTypeSymlink {

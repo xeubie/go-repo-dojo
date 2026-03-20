@@ -140,6 +140,10 @@ func (r *Repo) Status() (*Status, error) {
 	return r.status()
 }
 
+func (r *Repo) Restore(path string) error {
+	return r.restore(path)
+}
+
 func (r *Repo) ResetAdd(target RefOrOid) error {
 	if target.IsRef {
 		return r.replaceHead(target)
