@@ -70,6 +70,10 @@ func runPrint(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) erro
 		fmt.Fprintf(runOpts.Err, "a path you are removing does not exist\n")
 	case ErrRecursiveOptionRequired:
 		fmt.Fprintf(runOpts.Err, "to do this on a dir, add the -r flag\n")
+	case ErrBranchAlreadyExists:
+		fmt.Fprintf(runOpts.Err, "branch already exists\n")
+	case ErrCannotDeleteCurrentBranch:
+		fmt.Fprintf(runOpts.Err, "cannot delete the current branch\n")
 	case ErrCannotRemoveFileWithStagedAndUnstagedChanges,
 		ErrCannotRemoveFileWithStagedChanges,
 		ErrCannotRemoveFileWithUnstagedChanges:
@@ -169,6 +173,42 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 			return err
 		case TagRemove:
 			return repo.RemoveTag(RemoveTagInput{Name: cmd.Tag.Name})
+		}
+
+	case CommandBranch:
+		repo, err := OpenRepo(cwdPath, opts)
+		if err != nil {
+			return ErrRepoNotFound
+		}
+		defer repo.Close()
+
+		switch cmd.Branch.SubKind {
+		case BranchList:
+			head, err := repo.Head()
+			if err != nil {
+				return err
+			}
+			currentBranch := ""
+			if head.IsRef {
+				currentBranch = head.Ref.Name
+			}
+
+			branches, err := repo.ListBranches()
+			if err != nil {
+				return err
+			}
+			for _, name := range branches {
+				prefix := " "
+				if name == currentBranch {
+					prefix = "*"
+				}
+				fmt.Fprintf(runOpts.Out, "%s %s\n", prefix, name)
+			}
+			return nil
+		case BranchAdd:
+			return repo.AddBranch(AddBranchInput{Name: cmd.Branch.Name})
+		case BranchRemove:
+			return repo.RemoveBranch(RemoveBranchInput{Name: cmd.Branch.Name})
 		}
 	}
 	return fmt.Errorf("unknown command")

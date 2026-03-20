@@ -16,6 +16,7 @@ const (
 	CommandRm
 	CommandCommit
 	CommandTag
+	CommandBranch
 )
 
 var commandNames = map[CommandKind]string{
@@ -26,6 +27,7 @@ var commandNames = map[CommandKind]string{
 	CommandRm:      "rm",
 	CommandCommit:  "commit",
 	CommandTag:     "tag",
+	CommandBranch:  "branch",
 }
 
 var commandDescrips = map[CommandKind]string{
@@ -36,6 +38,7 @@ var commandDescrips = map[CommandKind]string{
 	CommandRm:      "no longer track file in the index *and* remove it from the work dir.",
 	CommandCommit:  "create a new commit.",
 	CommandTag:     "add, remove, and list tags.",
+	CommandBranch:  "add, remove, and list branches.",
 }
 
 var commandExamples = map[CommandKind]string{
@@ -57,6 +60,12 @@ remove tag:
     repodojo tag rm mytag
 list tags:
     repodojo tag list`,
+	CommandBranch: `add branch:
+    repodojo branch add mybranch
+remove branch:
+    repodojo branch rm mybranch
+list branches:
+    repodojo branch list`,
 }
 
 // valueFlags are flags that can have a value associated with them.
@@ -189,6 +198,19 @@ type TagCommand struct {
 	Message string // for add (optional)
 }
 
+type BranchCommandKind int
+
+const (
+	BranchList BranchCommandKind = iota
+	BranchAdd
+	BranchRemove
+)
+
+type BranchCommand struct {
+	SubKind BranchCommandKind
+	Name    string // for add/remove
+}
+
 type Command struct {
 	Kind    CommandKind
 	Init    *InitCommand
@@ -198,6 +220,7 @@ type Command struct {
 	Rm      *RmCommand
 	Commit  *CommitCommand
 	Tag     *TagCommand
+	Branch  *BranchCommand
 }
 
 func parseCommand(cmdArgs *CommandArgs) *Command {
@@ -301,6 +324,33 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			}}
 		}
 		return nil
+
+	case CommandBranch:
+		if len(cmdArgs.PositionalArgs) == 0 {
+			return nil
+		}
+		subCmd := cmdArgs.PositionalArgs[0]
+		switch subCmd {
+		case "list":
+			return &Command{Kind: CommandBranch, Branch: &BranchCommand{SubKind: BranchList}}
+		case "add":
+			if len(cmdArgs.PositionalArgs) != 2 {
+				return nil
+			}
+			return &Command{Kind: CommandBranch, Branch: &BranchCommand{
+				SubKind: BranchAdd,
+				Name:    cmdArgs.PositionalArgs[1],
+			}}
+		case "rm":
+			if len(cmdArgs.PositionalArgs) != 2 {
+				return nil
+			}
+			return &Command{Kind: CommandBranch, Branch: &BranchCommand{
+				SubKind: BranchRemove,
+				Name:    cmdArgs.PositionalArgs[1],
+			}}
+		}
+		return nil
 	}
 	return nil
 }
@@ -392,7 +442,7 @@ func PrintHelp(cmdKind *CommandKind, w io.Writer) {
 		}
 	} else {
 		fmt.Fprintf(w, "help: repodojo <command> [<args>]\n\n")
-		for kind := CommandInit; kind <= CommandTag; kind++ {
+		for kind := CommandInit; kind <= CommandBranch; kind++ {
 			name := commandNames[kind]
 			printAligned(w, name, commandDescrips[kind], indent)
 		}

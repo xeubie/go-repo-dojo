@@ -136,6 +136,18 @@ func (r *Repo) Commit(metadata CommitMetadata) (string, error) {
 	return r.writeCommit(metadata)
 }
 
+func (r *Repo) AddBranch(input AddBranchInput) error {
+	return r.addBranch(input)
+}
+
+func (r *Repo) RemoveBranch(input RemoveBranchInput) error {
+	return r.removeBranch(input)
+}
+
+func (r *Repo) ListBranches() ([]string, error) {
+	return r.listBranches()
+}
+
 func (r *Repo) AddTag(input AddTagInput) (string, error) {
 	return r.addTag(input)
 }
