@@ -373,7 +373,7 @@ type deltaChunk struct {
 }
 
 type deltaState struct {
-	baseReader    *LooseOrPackObjectReader
+	baseReader    ObjectReader
 	chunkIndex    int
 	chunkPosition uint64
 	realPosition  uint64
@@ -541,7 +541,7 @@ func initPackObjectReaderAtPosition(pr PackReader, position uint64) (*PackObject
 
 // initDelta reads delta instructions from the zlib stream and sets up the base reader.
 func (por *PackObjectReader) initDelta(repo *Repo) error {
-	var baseReader *LooseOrPackObjectReader
+	var baseReader ObjectReader
 
 	if por.deltaRefKind == deltaRefOfs {
 		dupPR, err := por.stream.packReader.Dupe()
@@ -553,9 +553,9 @@ func (por *PackObjectReader) initDelta(repo *Repo) error {
 		if err != nil {
 			return err
 		}
-		baseReader = &LooseOrPackObjectReader{kind: objectReaderPack, pack: basePack}
+		baseReader = basePack
 	} else {
-		lr, err := newLooseOrPackObjectReader(repo, por.deltaRefOIDHex)
+		lr, err := newObjectReader(repo, por.deltaRefOIDHex)
 		if err != nil {
 			return err
 		}
@@ -696,10 +696,11 @@ func (por *PackObjectReader) initDeltaAndCache(repo *Repo) error {
 			break
 		}
 		br := last.deltaState.baseReader
-		if br.kind == objectReaderLoose {
+		brPack, ok := br.(*PackObjectReader)
+		if !ok {
 			break
 		}
-		last = br.pack
+		last = brPack
 	}
 
 	// cache from innermost to outermost
@@ -774,8 +775,8 @@ func (por *PackObjectReader) initCache() error {
 	}
 
 	// free base delta cache if the base is itself a delta pack object
-	if state.baseReader.kind == objectReaderPack && state.baseReader.pack != nil && state.baseReader.pack.mode != packObjectBasic {
-		if bs := state.baseReader.pack.deltaState; bs != nil {
+	if brPack, ok := state.baseReader.(*PackObjectReader); ok && brPack.mode != packObjectBasic {
+		if bs := brPack.deltaState; bs != nil {
 			bs.chunkData = nil
 		}
 	}
@@ -938,16 +939,16 @@ func (por *PackObjectReader) SkipBytes(n uint64) error {
 }
 
 // ---------------------------------------------------------------------------
-// LooseOrPackObjectReader
+// ObjectReader
 // ---------------------------------------------------------------------------
 
-type looseObjectReader struct {
+type LooseObjectReader struct {
 	file       *os.File
 	zlibReader io.ReadCloser
 	header     ObjectHeader
 }
 
-func openLooseObject(repo *Repo, oidHex string) (*looseObjectReader, error) {
+func openLooseObject(repo *Repo, oidHex string) (*LooseObjectReader, error) {
 	objPath := filepath.Join(repo.repoDir, "objects", oidHex[:2], oidHex[2:])
 	f, err := os.Open(objPath)
 	if err != nil {
@@ -964,10 +965,10 @@ func openLooseObject(repo *Repo, oidHex string) (*looseObjectReader, error) {
 		f.Close()
 		return nil, err
 	}
-	return &looseObjectReader{file: f, zlibReader: zlibR, header: header}, nil
+	return &LooseObjectReader{file: f, zlibReader: zlibR, header: header}, nil
 }
 
-func (r *looseObjectReader) Close() {
+func (r *LooseObjectReader) Close() {
 	if r.zlibReader != nil {
 		r.zlibReader.Close()
 	}
@@ -976,7 +977,7 @@ func (r *looseObjectReader) Close() {
 	}
 }
 
-func (r *looseObjectReader) Reset() error {
+func (r *LooseObjectReader) Reset() error {
 	if r.zlibReader != nil {
 		r.zlibReader.Close()
 	}
@@ -1001,28 +1002,39 @@ func (r *looseObjectReader) Reset() error {
 	return nil
 }
 
-func (r *looseObjectReader) Read(p []byte) (int, error) {
+func (r *LooseObjectReader) Read(p []byte) (int, error) {
 	return r.zlibReader.Read(p)
 }
 
-type objectReaderKind int
-
-const (
-	objectReaderLoose objectReaderKind = iota
-	objectReaderPack
-)
-
-// LooseOrPackObjectReader reads an object from loose storage or from a pack file.
-type LooseOrPackObjectReader struct {
-	kind  objectReaderKind
-	loose *looseObjectReader
-	pack  *PackObjectReader
+func (r *LooseObjectReader) Header() ObjectHeader {
+	return r.header
 }
 
-func newLooseOrPackObjectReader(repo *Repo, oidHex string) (*LooseOrPackObjectReader, error) {
+func (r *LooseObjectReader) SkipBytes(n uint64) error {
+	var buf [512]byte
+	rem := n
+	for rem > 0 {
+		toRead := rem
+		if toRead > uint64(len(buf)) {
+			toRead = uint64(len(buf))
+		}
+		nr, err := r.Read(buf[:toRead])
+		if nr == 0 && err != nil {
+			return err
+		}
+		rem -= uint64(nr)
+	}
+	return nil
+}
+
+func (r *LooseObjectReader) Position() uint64 {
+	return 0
+}
+
+func newObjectReader(repo *Repo, oidHex string) (ObjectReader, error) {
 	loose, err := openLooseObject(repo, oidHex)
 	if err == nil {
-		return &LooseOrPackObjectReader{kind: objectReaderLoose, loose: loose}, nil
+		return loose, nil
 	}
 	if !os.IsNotExist(err) {
 		return nil, err
@@ -1031,63 +1043,7 @@ func newLooseOrPackObjectReader(repo *Repo, oidHex string) (*LooseOrPackObjectRe
 	if err != nil {
 		return nil, err
 	}
-	return &LooseOrPackObjectReader{kind: objectReaderPack, pack: pack}, nil
-}
-
-func (r *LooseOrPackObjectReader) Close() {
-	if r.kind == objectReaderLoose {
-		r.loose.Close()
-	} else {
-		r.pack.Close()
-	}
-}
-
-func (r *LooseOrPackObjectReader) Header() ObjectHeader {
-	if r.kind == objectReaderLoose {
-		return r.loose.header
-	}
-	return r.pack.Header()
-}
-
-func (r *LooseOrPackObjectReader) Reset() error {
-	if r.kind == objectReaderLoose {
-		return r.loose.Reset()
-	}
-	return r.pack.Reset()
-}
-
-func (r *LooseOrPackObjectReader) Read(p []byte) (int, error) {
-	if r.kind == objectReaderLoose {
-		return r.loose.Read(p)
-	}
-	return r.pack.Read(p)
-}
-
-func (r *LooseOrPackObjectReader) SkipBytes(n uint64) error {
-	if r.kind == objectReaderLoose {
-		var buf [512]byte
-		rem := n
-		for rem > 0 {
-			toRead := rem
-			if toRead > uint64(len(buf)) {
-				toRead = uint64(len(buf))
-			}
-			nr, err := r.loose.Read(buf[:toRead])
-			if nr == 0 && err != nil {
-				return err
-			}
-			rem -= uint64(nr)
-		}
-		return nil
-	}
-	return r.pack.SkipBytes(n)
-}
-
-func (r *LooseOrPackObjectReader) Position() uint64 {
-	if r.kind == objectReaderLoose {
-		return 0
-	}
-	return r.pack.Position()
+	return pack, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -1184,7 +1140,7 @@ func (it *PackIterator) Next(repo *Repo, offsetToOID map[uint64][]byte) (*PackOb
 type packWriterObj struct {
 	kind   ObjectKind
 	size   uint64
-	reader *ObjectReader
+	reader ObjectReader
 }
 
 type PackWriter struct {

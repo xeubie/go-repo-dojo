@@ -573,33 +573,18 @@ func (repo *Repo) writeTag(input AddTagInput, targetOID string) (string, error) 
 // ObjectReader – streaming reader for a single git object
 // ---------------------------------------------------------------------------
 
-type ObjectReader struct {
-	repo  *Repo
-	inner *LooseOrPackObjectReader
+// ObjectReader reads an object from loose storage or from a pack file.
+type ObjectReader interface {
+	Close()
+	Header() ObjectHeader
+	Reset() error
+	Read(p []byte) (int, error)
+	SkipBytes(n uint64) error
+	Position() uint64
 }
 
-func (repo *Repo) NewObjectReader(oidHex string) (*ObjectReader, error) {
-	inner, err := newLooseOrPackObjectReader(repo, oidHex)
-	if err != nil {
-		return nil, err
-	}
-	return &ObjectReader{repo: repo, inner: inner}, nil
-}
-
-func (r *ObjectReader) Close() {
-	r.inner.Close()
-}
-
-func (r *ObjectReader) Header() ObjectHeader {
-	return r.inner.Header()
-}
-
-func (r *ObjectReader) Reset() error {
-	return r.inner.Reset()
-}
-
-func (r *ObjectReader) Read(p []byte) (int, error) {
-	return r.inner.Read(p)
+func (repo *Repo) NewObjectReader(oidHex string) (ObjectReader, error) {
+	return newObjectReader(repo, oidHex)
 }
 
 // ---------------------------------------------------------------------------
@@ -646,7 +631,7 @@ type Object struct {
 	Tree   *TreeContent
 	Tag    *TagContent
 
-	reader *ObjectReader
+	reader ObjectReader
 }
 
 func (repo *Repo) NewObject(oidHex string, full bool) (*Object, error) {
