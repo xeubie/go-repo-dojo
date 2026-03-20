@@ -382,16 +382,30 @@ type deltaState struct {
 	reconSize     uint64
 }
 
+type packObjectMode int
+
+const (
+	packObjectBasic packObjectMode = iota
+	packObjectDelta
+)
+
+type deltaRefKind int
+
+const (
+	deltaRefOfs deltaRefKind = iota
+	deltaRefRef
+)
+
 type PackObjectReader struct {
 	stream *packObjectStream
 	relPos uint64 // position within decompressed data
 	size   uint64 // decompressed size
 
-	isBasic bool
+	mode packObjectMode
 	// basic
 	basicHeader ObjectHeader
 	// delta init
-	deltaIsOfs     bool
+	deltaRefKind   deltaRefKind
 	deltaOfsPos    uint64
 	deltaRefOIDHex string
 	// delta state (set after initDelta)
@@ -462,10 +476,10 @@ func initPackObjectReaderAtPosition(pr PackReader, position uint64) (*PackObject
 			return nil, err
 		}
 		return &PackObjectReader{
-			stream:  stream,
-			relPos:  0,
-			size:    size,
-			isBasic: true,
+			stream: stream,
+			relPos: 0,
+			size:   size,
+			mode:   packObjectBasic,
 			basicHeader: ObjectHeader{
 				Kind: packObjectKindToObjectKind(kind),
 				Size: size,
@@ -492,12 +506,12 @@ func initPackObjectReaderAtPosition(pr PackReader, position uint64) (*PackObject
 			return nil, err
 		}
 		return &PackObjectReader{
-			stream:      stream,
-			relPos:      0,
-			size:        size,
-			isBasic:     false,
-			deltaIsOfs:  true,
-			deltaOfsPos: position - offset,
+			stream:       stream,
+			relPos:       0,
+			size:         size,
+			mode:         packObjectDelta,
+			deltaRefKind: deltaRefOfs,
+			deltaOfsPos:  position - offset,
 		}, nil
 
 	case packRefDelta:
@@ -516,8 +530,8 @@ func initPackObjectReaderAtPosition(pr PackReader, position uint64) (*PackObject
 			stream:         stream,
 			relPos:         0,
 			size:           size,
-			isBasic:        false,
-			deltaIsOfs:     false,
+			mode:           packObjectDelta,
+			deltaRefKind:   deltaRefRef,
 			deltaRefOIDHex: oidHex,
 		}, nil
 	}
@@ -529,7 +543,7 @@ func initPackObjectReaderAtPosition(pr PackReader, position uint64) (*PackObject
 func (por *PackObjectReader) initDelta(repo *Repo) error {
 	var baseReader *LooseOrPackObjectReader
 
-	if por.deltaIsOfs {
+	if por.deltaRefKind == deltaRefOfs {
 		dupPR, err := por.stream.packReader.Dupe()
 		if err != nil {
 			return err
@@ -539,7 +553,7 @@ func (por *PackObjectReader) initDelta(repo *Repo) error {
 		if err != nil {
 			return err
 		}
-		baseReader = &LooseOrPackObjectReader{isLoose: false, pack: basePack}
+		baseReader = &LooseOrPackObjectReader{kind: objectReaderPack, pack: basePack}
 	} else {
 		lr, err := newLooseOrPackObjectReader(repo, por.deltaRefOIDHex)
 		if err != nil {
@@ -673,7 +687,7 @@ func (por *PackObjectReader) initDelta(repo *Repo) error {
 func (por *PackObjectReader) initDeltaAndCache(repo *Repo) error {
 	var deltaObjects []*PackObjectReader
 	last := por
-	for !last.isBasic {
+	for last.mode != packObjectBasic {
 		if err := last.initDelta(repo); err != nil {
 			return err
 		}
@@ -682,7 +696,7 @@ func (por *PackObjectReader) initDeltaAndCache(repo *Repo) error {
 			break
 		}
 		br := last.deltaState.baseReader
-		if br.isLoose {
+		if br.kind == objectReaderLoose {
 			break
 		}
 		last = br.pack
@@ -760,7 +774,7 @@ func (por *PackObjectReader) initCache() error {
 	}
 
 	// free base delta cache if the base is itself a delta pack object
-	if !state.baseReader.isLoose && state.baseReader.pack != nil && !state.baseReader.pack.isBasic {
+	if state.baseReader.kind == objectReaderPack && state.baseReader.pack != nil && state.baseReader.pack.mode != packObjectBasic {
 		if bs := state.baseReader.pack.deltaState; bs != nil {
 			bs.chunkData = nil
 		}
@@ -776,7 +790,7 @@ func (por *PackObjectReader) Close() {
 }
 
 func (por *PackObjectReader) Header() ObjectHeader {
-	if por.isBasic {
+	if por.mode == packObjectBasic {
 		return por.basicHeader
 	}
 	if por.deltaState != nil {
@@ -805,7 +819,7 @@ func (por *PackObjectReader) Reset() error {
 }
 
 func (por *PackObjectReader) Position() uint64 {
-	if por.isBasic {
+	if por.mode == packObjectBasic {
 		return por.relPos
 	}
 	if por.deltaState != nil {
@@ -815,7 +829,7 @@ func (por *PackObjectReader) Position() uint64 {
 }
 
 func (por *PackObjectReader) Read(p []byte) (int, error) {
-	if por.isBasic {
+	if por.mode == packObjectBasic {
 		return por.readBasic(p)
 	}
 	return por.readDelta(p)
@@ -991,17 +1005,24 @@ func (r *looseObjectReader) Read(p []byte) (int, error) {
 	return r.zlibReader.Read(p)
 }
 
+type objectReaderKind int
+
+const (
+	objectReaderLoose objectReaderKind = iota
+	objectReaderPack
+)
+
 // LooseOrPackObjectReader reads an object from loose storage or from a pack file.
 type LooseOrPackObjectReader struct {
-	isLoose bool
-	loose   *looseObjectReader
-	pack    *PackObjectReader
+	kind  objectReaderKind
+	loose *looseObjectReader
+	pack  *PackObjectReader
 }
 
 func newLooseOrPackObjectReader(repo *Repo, oidHex string) (*LooseOrPackObjectReader, error) {
 	loose, err := openLooseObject(repo, oidHex)
 	if err == nil {
-		return &LooseOrPackObjectReader{isLoose: true, loose: loose}, nil
+		return &LooseOrPackObjectReader{kind: objectReaderLoose, loose: loose}, nil
 	}
 	if !os.IsNotExist(err) {
 		return nil, err
@@ -1010,11 +1031,11 @@ func newLooseOrPackObjectReader(repo *Repo, oidHex string) (*LooseOrPackObjectRe
 	if err != nil {
 		return nil, err
 	}
-	return &LooseOrPackObjectReader{isLoose: false, pack: pack}, nil
+	return &LooseOrPackObjectReader{kind: objectReaderPack, pack: pack}, nil
 }
 
 func (r *LooseOrPackObjectReader) Close() {
-	if r.isLoose {
+	if r.kind == objectReaderLoose {
 		r.loose.Close()
 	} else {
 		r.pack.Close()
@@ -1022,28 +1043,28 @@ func (r *LooseOrPackObjectReader) Close() {
 }
 
 func (r *LooseOrPackObjectReader) Header() ObjectHeader {
-	if r.isLoose {
+	if r.kind == objectReaderLoose {
 		return r.loose.header
 	}
 	return r.pack.Header()
 }
 
 func (r *LooseOrPackObjectReader) Reset() error {
-	if r.isLoose {
+	if r.kind == objectReaderLoose {
 		return r.loose.Reset()
 	}
 	return r.pack.Reset()
 }
 
 func (r *LooseOrPackObjectReader) Read(p []byte) (int, error) {
-	if r.isLoose {
+	if r.kind == objectReaderLoose {
 		return r.loose.Read(p)
 	}
 	return r.pack.Read(p)
 }
 
 func (r *LooseOrPackObjectReader) SkipBytes(n uint64) error {
-	if r.isLoose {
+	if r.kind == objectReaderLoose {
 		var buf [512]byte
 		rem := n
 		for rem > 0 {
@@ -1063,7 +1084,7 @@ func (r *LooseOrPackObjectReader) SkipBytes(n uint64) error {
 }
 
 func (r *LooseOrPackObjectReader) Position() uint64 {
-	if r.isLoose {
+	if r.kind == objectReaderLoose {
 		return 0
 	}
 	return r.pack.Position()
@@ -1135,12 +1156,12 @@ func (it *PackIterator) Next(repo *Repo, offsetToOID map[uint64][]byte) (*PackOb
 		return nil, err
 	}
 
-	if !por.isBasic {
-		if por.deltaIsOfs {
+	if por.mode == packObjectDelta {
+		if por.deltaRefKind == deltaRefOfs {
 			// try to convert ofs_delta to ref_delta using the offset→OID map
 			if offsetToOID != nil {
 				if oid, ok := offsetToOID[por.deltaOfsPos]; ok {
-					por.deltaIsOfs = false
+					por.deltaRefKind = deltaRefRef
 					por.deltaRefOIDHex = hex.EncodeToString(oid)
 				}
 			}
