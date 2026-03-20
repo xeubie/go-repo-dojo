@@ -234,6 +234,45 @@ func (t *treeBuilder) addTreeEntry(name string, oidBytes []byte) {
 	})
 }
 
+func (t *treeBuilder) addIndexEntries(repo *Repo, idx *Index, prefix string, childNames []string) error {
+	for _, name := range childNames {
+		var path string
+		if prefix == "" {
+			path = name
+		} else {
+			path = JoinPath([]string{prefix, name})
+		}
+
+		if entries, ok := idx.entries[path]; ok {
+			entry := entries[0]
+			if entry != nil {
+				t.addBlobEntry(entry.mode, name, entry.oid)
+			}
+		} else if children, ok := idx.dirToChildren[path]; ok {
+			subtree := newTreeBuilder()
+
+			var childNamesList []string
+			for k := range children {
+				childNamesList = append(childNamesList, k)
+			}
+
+			if err := subtree.addIndexEntries(repo, idx, path, childNamesList); err != nil {
+				return err
+			}
+
+			subtreeOID, err := repo.writeTree(subtree)
+			if err != nil {
+				return err
+			}
+			t.addTreeEntry(name, subtreeOID)
+		} else {
+			return fmt.Errorf("object entry not found: %s", path)
+		}
+	}
+
+	return nil
+}
+
 func (repo *Repo) writeTree(tree *treeBuilder) ([]byte, error) {
 	sort.Slice(tree.entries, func(i, j int) bool {
 		return tree.entries[i].sortKey < tree.entries[j].sortKey
@@ -307,40 +346,6 @@ func (repo *Repo) signContent(lines []string, signingKey string) ([]string, erro
 	return strings.Split(sigContent, "\n"), nil
 }
 
-func (repo *Repo) buildTreeFromIndex(idx *Index, prefix string, childNames []string) ([]byte, error) {
-	tree := newTreeBuilder()
-
-	for _, name := range childNames {
-		var path string
-		if prefix == "" {
-			path = name
-		} else {
-			path = JoinPath([]string{prefix, name})
-		}
-
-		if entries, ok := idx.entries[path]; ok {
-			entry := entries[0]
-			if entry != nil {
-				tree.addBlobEntry(entry.mode, name, entry.oid)
-			}
-		} else if children, ok := idx.dirToChildren[path]; ok {
-			var childNamesList []string
-			for k := range children {
-				childNamesList = append(childNamesList, k)
-			}
-			subtreeOID, err := repo.buildTreeFromIndex(idx, path, childNamesList)
-			if err != nil {
-				return nil, err
-			}
-			tree.addTreeEntry(name, subtreeOID)
-		} else {
-			return nil, fmt.Errorf("object entry not found: %s", path)
-		}
-	}
-
-	return repo.writeTree(tree)
-}
-
 func (repo *Repo) checkForUnfinishedMerge() error {
 	mergeHeadNames := []string{"MERGE_HEAD", "CHERRY_PICK_HEAD"}
 	for _, name := range mergeHeadNames {
@@ -385,7 +390,11 @@ func (repo *Repo) writeCommit(metadata CommitMetadata) (string, error) {
 		rootChildNames = append(rootChildNames, k)
 	}
 
-	treeOIDBytes, err := repo.buildTreeFromIndex(idx, "", rootChildNames)
+	tree := newTreeBuilder()
+	if err := tree.addIndexEntries(repo, idx, "", rootChildNames); err != nil {
+		return "", err
+	}
+	treeOIDBytes, err := repo.writeTree(tree)
 	if err != nil {
 		return "", err
 	}
