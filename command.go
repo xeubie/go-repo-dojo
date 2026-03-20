@@ -407,8 +407,10 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 				SubKind: TagRemove,
 				Name:    cmdArgs.PositionalArgs[1],
 			}}
+		default:
+			cmdArgs.UnusedArgs[subCmd] = true
+			return nil
 		}
-		return nil
 
 	case CommandStatus:
 		return &Command{Kind: CommandStatus}
@@ -437,8 +439,10 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 				SubKind: BranchRemove,
 				Name:    cmdArgs.PositionalArgs[1],
 			}}
+		default:
+			cmdArgs.UnusedArgs[subCmd] = true
+			return nil
 		}
-		return nil
 
 	case CommandSwitchDir:
 		if len(cmdArgs.PositionalArgs) != 1 {
@@ -515,14 +519,10 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			if len(cmdArgs.PositionalArgs) < 3 {
 				return nil
 			}
-			value := cmdArgs.PositionalArgs[2]
-			if len(cmdArgs.PositionalArgs) > 3 {
-				value = strings.Join(cmdArgs.PositionalArgs[2:], " ")
-			}
 			return &Command{Kind: CommandConfig, Config: &ConfigCommand{
 				SubKind: ConfigAdd,
 				Name:    cmdArgs.PositionalArgs[1],
-				Value:   value,
+				Value:   strings.Join(cmdArgs.PositionalArgs[2:], " "),
 			}}
 		case "rm":
 			if len(cmdArgs.PositionalArgs) != 2 {
@@ -532,8 +532,10 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 				SubKind: ConfigRemove,
 				Name:    cmdArgs.PositionalArgs[1],
 			}}
+		default:
+			cmdArgs.UnusedArgs[subCmd] = true
+			return nil
 		}
-		return nil
 	}
 	return nil
 }
