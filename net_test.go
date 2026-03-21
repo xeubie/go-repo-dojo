@@ -35,15 +35,6 @@ func runGitOnServer(t *testing.T, server testServer, dir string, args ...string)
 	}
 }
 
-// runGitOnServerMayFail is like runGitOnServer but ignores exit errors.
-func runGitOnServerMayFail(t *testing.T, server testServer, dir string, args ...string) {
-	t.Helper()
-	if s, ok := server.(*sshServer); ok {
-		runGitWithSSHMayFail(t, dir, s.sshConfigArg(), args...)
-	} else {
-		runGitMayFail(t, dir, args...)
-	}
-}
 
 // --- HTTP server ---
 
@@ -293,35 +284,6 @@ func runGitWithSSH(t *testing.T, dir string, sshArg string, args ...string) {
 	}
 }
 
-func runGitMayFail(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	if err := cmd.Run(); err != nil {
-		if _, ok := err.(*exec.ExitError); ok {
-			return
-		}
-		t.Fatalf("git %s failed to start: %v", strings.Join(args, " "), err)
-	}
-}
-
-func runGitWithSSHMayFail(t *testing.T, dir string, sshArg string, args ...string) {
-	t.Helper()
-	fullArgs := []string{"-c", sshArg}
-	fullArgs = append(fullArgs, args...)
-	cmd := exec.Command("git", fullArgs...)
-	cmd.Dir = dir
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	if err := cmd.Run(); err != nil {
-		if _, ok := err.(*exec.ExitError); ok {
-			return
-		}
-		t.Fatalf("git %s failed to start: %v", strings.Join(fullArgs, " "), err)
-	}
-}
 
 func writeTestFile(t *testing.T, dir, name, content string) {
 	t.Helper()
@@ -489,14 +451,14 @@ func testClone(t *testing.T, server testServer, tempDir string) {
 
 	// clone with --filter=blob:none
 	os.RemoveAll(clientPath)
-	runGitOnServerMayFail(t, server, tempDir, "clone", "--filter=blob:none", remoteURL, "client")
+	runGitOnServer(t, server, tempDir, "clone", "--filter=blob:none", remoteURL, "client")
 	if _, err := os.Stat(filepath.Join(clientPath, "hello.txt")); err != nil {
 		t.Fatalf("hello.txt not found after blob:none clone: %v", err)
 	}
 
 	// clone with --filter=tree:0
 	os.RemoveAll(clientPath)
-	runGitOnServerMayFail(t, server, tempDir, "clone", "--filter=tree:0", remoteURL, "client")
+	runGitOnServer(t, server, tempDir, "clone", "--filter=tree:0", remoteURL, "client")
 	if _, err := os.Stat(filepath.Join(clientPath, "goodbye.txt")); err != nil {
 		t.Fatalf("goodbye.txt not found after tree:0 clone: %v", err)
 	}
