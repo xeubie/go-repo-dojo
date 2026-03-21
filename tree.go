@@ -19,25 +19,9 @@ type TreeChange struct {
 
 // treeDiff computes changes between two commit OIDs.
 // Either oid may be "" to represent an empty tree.
-func (repo *Repo) treeDiff(oldCommitOID, newCommitOID string) (map[string]TreeChange, error) {
+func (repo *Repo) treeDiff(oldOID, newOID string) (map[string]TreeChange, error) {
 	changes := make(map[string]TreeChange)
-
-	var oldTreeOID, newTreeOID string
-	var err error
-	if oldCommitOID != "" {
-		oldTreeOID, err = repo.readCommitTree(oldCommitOID)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if newCommitOID != "" {
-		newTreeOID, err = repo.readCommitTree(newCommitOID)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return repo.treeCompare(oldTreeOID, newTreeOID, "", changes)
+	return repo.treeCompare(oldOID, newOID, "", changes)
 }
 
 func (repo *Repo) treeCompare(oldTreeOID, newTreeOID, prefix string, changes map[string]TreeChange) (map[string]TreeChange, error) {
@@ -121,25 +105,36 @@ func (repo *Repo) treeCompare(oldTreeOID, newTreeOID, prefix string, changes map
 	return changes, nil
 }
 
-func (repo *Repo) loadTree(treeOID string) (map[string]TreeEntry, error) {
+func (repo *Repo) loadTree(oid string) (map[string]TreeEntry, error) {
 	result := make(map[string]TreeEntry)
-	if treeOID == "" {
+	if oid == "" {
 		return result, nil
 	}
-	obj, err := repo.NewObject(treeOID, true)
+	obj, err := repo.NewObject(oid, true)
 	if err != nil {
 		return nil, err
 	}
 	defer obj.Close()
-	if obj.Tree == nil {
+	switch obj.Kind {
+	case ObjectKindTree:
+		if obj.Tree != nil {
+			for _, e := range obj.Tree.Entries {
+				oidCopy := make([]byte, len(e.OID))
+				copy(oidCopy, e.OID)
+				result[e.Name] = TreeEntry{OID: oidCopy, Mode: e.Mode}
+			}
+		}
+		return result, nil
+	case ObjectKindCommit:
+		if obj.Commit != nil {
+			return repo.loadTree(obj.Commit.Tree)
+		}
+		return result, nil
+	case ObjectKindBlob, ObjectKindTag:
+		return result, nil
+	default:
 		return result, nil
 	}
-	for _, e := range obj.Tree.Entries {
-		oidCopy := make([]byte, len(e.OID))
-		copy(oidCopy, e.OID)
-		result[e.Name] = TreeEntry{OID: oidCopy, Mode: e.Mode}
-	}
-	return result, nil
 }
 
 // pathToTreeEntry walks the HEAD tree to find the entry at the given path.
