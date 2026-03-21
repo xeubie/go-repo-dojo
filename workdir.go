@@ -461,7 +461,41 @@ func (repo *Repo) objectToFile(path string, te TreeEntry) error {
 		return err
 	}
 
-	if te.Mode.ObjType() == ModeObjectTypeTree {
+	switch te.Mode.ObjType() {
+	case ModeObjectTypeRegularFile:
+		obj, err := repo.NewObject(oidHex, false)
+		if err != nil {
+			return err
+		}
+		defer obj.Close()
+
+		perm := os.FileMode(0644)
+		if te.Mode.UnixPerm() == 0o755 {
+			perm = 0755
+		}
+
+		f, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		buf := make([]byte, 8192)
+		for {
+			n, readErr := obj.reader.Read(buf)
+			if n > 0 {
+				if _, err := f.Write(buf[:n]); err != nil {
+					return err
+				}
+			}
+			if readErr != nil {
+				break
+			}
+		}
+
+		return nil
+
+	case ModeObjectTypeTree:
 		obj, err := repo.NewObject(oidHex, true)
 		if err != nil {
 			return err
@@ -478,10 +512,8 @@ func (repo *Repo) objectToFile(path string, te TreeEntry) error {
 			}
 		}
 		return nil
-	}
 
-	if te.Mode.ObjType() == ModeObjectTypeSymlink {
-		// read the blob to get the symlink target
+	case ModeObjectTypeSymlink:
 		obj, err := repo.NewObject(oidHex, false)
 		if err != nil {
 			return err
@@ -493,43 +525,15 @@ func (repo *Repo) objectToFile(path string, te TreeEntry) error {
 			return err
 		}
 		data = data[:n]
-		// remove existing file/symlink if present
 		os.Remove(fullPath)
 		return os.Symlink(string(data), fullPath)
-	}
 
-	// regular file
-	obj, err := repo.NewObject(oidHex, false)
-	if err != nil {
-		return err
-	}
-	defer obj.Close()
+	case ModeObjectTypeGitlink:
+		return fmt.Errorf("submodules not supported")
 
-	perm := os.FileMode(0644)
-	if te.Mode.UnixPerm() == 0o755 {
-		perm = 0755
+	default:
+		return fmt.Errorf("unknown object type: %d", te.Mode.ObjType())
 	}
-
-	f, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	buf := make([]byte, 8192)
-	for {
-		n, readErr := obj.reader.Read(buf)
-		if n > 0 {
-			if _, err := f.Write(buf[:n]); err != nil {
-				return err
-			}
-		}
-		if readErr != nil {
-			break
-		}
-	}
-
-	return nil
 }
 
 func treeEntryDiffersFromIndex(te *TreeEntry, ie *IndexEntry) bool {
