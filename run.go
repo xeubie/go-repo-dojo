@@ -5,6 +5,7 @@ import (
 	"io"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 type RunOpts struct {
@@ -316,6 +317,61 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 			return ErrRepoNotFound
 		}
 		return repo.Restore(cmd.Restore.Path)
+
+	case CommandLog:
+		repo, err := OpenRepo(cwdPath, opts)
+		if err != nil {
+			return ErrRepoNotFound
+		}
+
+		// resolve targets to OIDs
+		var startOIDs []string
+		for _, target := range cmd.Log.Targets {
+			oid, err := repo.readRefRecur(target)
+			if err != nil || oid == "" {
+				fmt.Fprintf(runOpts.Err, "invalid ref: %s\n", target.OID)
+				if target.IsRef {
+					fmt.Fprintf(runOpts.Err, "invalid ref: %s\n", target.Ref.ToPath())
+				}
+				return ErrHandled
+			}
+			startOIDs = append(startOIDs, oid)
+		}
+
+		iter, err := repo.Log(startOIDs)
+		if err != nil {
+			return err
+		}
+		for {
+			rawObj, err := iter.Next()
+			if err != nil {
+				return err
+			}
+			if rawObj == nil {
+				break
+			}
+			rawObj.Close()
+
+			// read the full commit
+			obj, err := repo.NewObject(rawObj.OID, true)
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintf(runOpts.Out, "commit %s\n", obj.OID)
+			if obj.Commit.Author != "" {
+				fmt.Fprintf(runOpts.Out, "author: %s\n", obj.Commit.Author)
+			}
+			fmt.Fprintf(runOpts.Out, "\n")
+
+			for _, line := range strings.Split(obj.Commit.Message, "\n") {
+				fmt.Fprintf(runOpts.Out, "    %s\n", line)
+			}
+			fmt.Fprintf(runOpts.Out, "\n")
+
+			obj.Close()
+		}
+		return nil
 
 	case CommandConfig:
 		repo, err := OpenRepo(cwdPath, opts)

@@ -70,7 +70,6 @@ func TestCreateAndReadPack(t *testing.T) {
 	}
 
 	objIter := repo.NewObjectIterator(ObjectIteratorOptions{Kind: ObjectIterAll})
-	defer objIter.Close()
 	objIter.Include(headOID)
 
 	packWriter, err := repo.NewPackWriter(objIter)
@@ -295,7 +294,6 @@ func TestWritePackFile(t *testing.T) {
 	}
 
 	objIter := clientRepo.NewObjectIterator(ObjectIteratorOptions{Kind: ObjectIterAll})
-	defer objIter.Close()
 	objIter.Include(commit2)
 
 	pw, err := clientRepo.NewPackWriter(objIter)

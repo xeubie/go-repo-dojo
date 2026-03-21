@@ -23,6 +23,7 @@ const (
 	CommandResetDir
 	CommandResetAdd
 	CommandRestore
+	CommandLog
 	CommandConfig
 	CommandRemote
 )
@@ -42,6 +43,7 @@ var commandNames = map[CommandKind]string{
 	CommandResetDir:  "reset-dir",
 	CommandResetAdd:  "reset-add",
 	CommandRestore:   "restore",
+	CommandLog:       "log",
 	CommandConfig:    "config",
 	CommandRemote:    "remote",
 }
@@ -61,6 +63,7 @@ var commandDescrips = map[CommandKind]string{
 	CommandResetDir:  "make the current branch point to a new commit id.\nupdates both the index and the work dir.\nsimilar to `git reset --hard`.",
 	CommandResetAdd:  "make the current branch point to a new commit id.\ndoes not update the index or the work dir.\nsimilar to `git reset --soft`.",
 	CommandRestore:   "restore files in the work dir.",
+	CommandLog:       "show commit logs.",
 	CommandConfig:    "add, remove, and list config options.",
 	CommandRemote:    "add, remove, and list remotes.",
 }
@@ -106,6 +109,10 @@ reset current branch to point to a new commit id:
 	CommandResetAdd: `reset current branch to point to a new commit id:
     repomofo reset-add a1b2c3...`,
 	CommandRestore: `repomofo restore myfile.txt`,
+	CommandLog: `display log:
+    repomofo log
+display specified branch:
+    repomofo log branch_name`,
 	CommandConfig: `add config:
     repomofo config add core.editor vim
 remove config:
@@ -296,12 +303,17 @@ type Command struct {
 	Switch   *SwitchCommand
 	ResetAdd *ResetAddCommand
 	Restore  *RestoreCommand
+	Log      *LogCommand
 	Config   *ConfigCommand
 	Remote   *ConfigCommand
 }
 
 type RestoreCommand struct {
 	Path string
+}
+
+type LogCommand struct {
+	Targets []RefOrOid
 }
 
 type ConfigCommandKind int
@@ -516,6 +528,17 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 		return &Command{Kind: CommandRestore, Restore: &RestoreCommand{
 			Path: cmdArgs.PositionalArgs[0],
 		}}
+
+	case CommandLog:
+		var targets []RefOrOid
+		for _, arg := range cmdArgs.PositionalArgs {
+			target := RefOrOidFromUser(arg, SHA1Hash)
+			if target == nil {
+				return nil
+			}
+			targets = append(targets, *target)
+		}
+		return &Command{Kind: CommandLog, Log: &LogCommand{Targets: targets}}
 
 	case CommandConfig, CommandRemote:
 		if len(cmdArgs.PositionalArgs) == 0 {

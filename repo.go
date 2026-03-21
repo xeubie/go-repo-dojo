@@ -274,6 +274,26 @@ func (r *Repo) Switch(input SwitchInput) (*SwitchResult, error) {
 	return r.switchDir(input)
 }
 
+func (r *Repo) Log(startOIDs []string) (*ObjectIterator, error) {
+	iter := r.NewObjectIterator(ObjectIteratorOptions{Kind: ObjectIterCommit})
+
+	if len(startOIDs) == 0 {
+		headOID, err := r.ReadHeadRecurMaybe()
+		if err != nil {
+			return nil, err
+		}
+		if headOID != "" {
+			iter.Include(headOID)
+		}
+	} else {
+		for _, oid := range startOIDs {
+			iter.Include(oid)
+		}
+	}
+
+	return iter, nil
+}
+
 func (r *Repo) AddBranch(input AddBranchInput) error {
 	return r.addBranch(input)
 }

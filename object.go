@@ -824,8 +824,6 @@ func (repo *Repo) NewObjectIterator(opts ObjectIteratorOptions) *ObjectIterator 
 	}
 }
 
-func (it *ObjectIterator) Close() {}
-
 func (it *ObjectIterator) Include(oidHex string) {
 	it.includeAtDepth(oidHex, 0)
 }
