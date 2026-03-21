@@ -61,7 +61,7 @@ var commandDescrips = map[CommandKind]string{
 	CommandSwitchDir: "switch to a branch or commit id.",
 	CommandReset:     "make the current branch point to a new commit id.\nupdates the index, but the files in the work dir are left alone.",
 	CommandResetDir:  "make the current branch point to a new commit id.\nupdates both the index and the work dir.\nsimilar to `git reset --hard`.",
-	CommandResetAdd:  "make the current branch point to a new commit id.\ndoes not update the index or the work dir.\nsimilar to `git reset --soft`.",
+	CommandResetAdd:  "make the current branch point to a new commit id.\ndoes not update the index or the work dir.\nthis is like calling reset and then adding everything to the index.\nsimilar to `git reset --soft`.",
 	CommandRestore:   "restore files in the work dir.",
 	CommandLog:       "show commit logs.",
 	CommandConfig:    "add, remove, and list config options.",
