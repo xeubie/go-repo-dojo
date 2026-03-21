@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -63,12 +62,16 @@ func (s *httpServer) start(t *testing.T) {
 		t.Fatalf("abs temp dir failed: %v", err)
 	}
 
-	backendPath := gitHTTPBackendPath()
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git not found: %v", err)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		pathTranslated := filepath.Join(absTempDir, r.URL.Path)
 		handler := &cgi.Handler{
-			Path: backendPath,
+			Path: gitPath,
+			Args: []string{"http-backend"},
 			Env: []string{
 				"GIT_PROJECT_ROOT=" + absTempDir,
 				"GIT_HTTP_EXPORT_ALL=1",
@@ -113,7 +116,7 @@ func (s *rawServer) start(t *testing.T) {
 	s.process = exec.Command("git", "daemon", "--reuseaddr", "--base-path=.",
 		"--export-all", "--enable=receive-pack", "--log-destination=stderr", portStr)
 	s.process.Dir = s.tempDir
-	s.process.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcGroup(s.process)
 	if err := s.process.Start(); err != nil {
 		t.Fatalf("git daemon start failed: %v", err)
 	}
@@ -122,7 +125,7 @@ func (s *rawServer) start(t *testing.T) {
 
 func (s *rawServer) stop() {
 	if s.process != nil && s.process.Process != nil {
-		syscall.Kill(-s.process.Process.Pid, syscall.SIGKILL)
+		killProcGroup(s.process)
 		s.process.Wait()
 	}
 }
@@ -205,7 +208,7 @@ func (s *sshServer) start(t *testing.T) {
 
 	s.process = exec.Command("./sshd.sh")
 	s.process.Dir = s.tempDir
-	s.process.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcGroup(s.process)
 	if err := s.process.Start(); err != nil {
 		t.Fatalf("sshd start failed: %v", err)
 	}
@@ -214,7 +217,7 @@ func (s *sshServer) start(t *testing.T) {
 
 func (s *sshServer) stop() {
 	if s.process != nil && s.process.Process != nil {
-		syscall.Kill(-s.process.Process.Pid, syscall.SIGKILL)
+		killProcGroup(s.process)
 		s.process.Wait()
 	}
 }
@@ -243,21 +246,6 @@ func waitForPort(t *testing.T, port int) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("server on port %d did not become ready", port)
-}
-
-func gitHTTPBackendPath() string {
-	if p, err := exec.LookPath("git-http-backend"); err == nil {
-		return p
-	}
-	for _, p := range []string{
-		"/usr/lib/git-core/git-http-backend",
-		"/usr/libexec/git-core/git-http-backend",
-	} {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return "git-http-backend"
 }
 
 func runGit(t *testing.T, dir string, args ...string) {
