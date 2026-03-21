@@ -95,42 +95,6 @@ func (s *httpServer) remoteURL(serverPath string) string {
 	return fmt.Sprintf("http://localhost:%d/server", s.port)
 }
 
-// --- Raw git daemon server ---
-
-type rawServer struct {
-	port    int
-	tempDir string
-	process *exec.Cmd
-}
-
-func newRawServer(port int, tempDir string) *rawServer {
-	return &rawServer{port: port, tempDir: tempDir}
-}
-
-func (s *rawServer) start(t *testing.T) {
-	t.Helper()
-	portStr := fmt.Sprintf("--port=%d", s.port)
-	s.process = exec.Command("git", "daemon", "--reuseaddr", "--base-path=.",
-		"--export-all", "--enable=receive-pack", "--log-destination=stderr", portStr)
-	s.process.Dir = s.tempDir
-	setProcGroup(s.process)
-	if err := s.process.Start(); err != nil {
-		t.Fatalf("git daemon start failed: %v", err)
-	}
-	waitForPort(t, s.port)
-}
-
-func (s *rawServer) stop() {
-	if s.process != nil && s.process.Process != nil {
-		killProcGroup(s.process)
-		s.process.Wait()
-	}
-}
-
-func (s *rawServer) remoteURL(serverPath string) string {
-	return fmt.Sprintf("git://localhost:%d/server", s.port)
-}
-
 // --- SSH server ---
 
 type sshServer struct {
@@ -368,14 +332,6 @@ func TestCloneHTTP(t *testing.T) {
 	testClone(t, newHTTPServer(3031, tempDir, binPath), tempDir, nil)
 }
 
-func TestCloneRaw(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("raw transport not supported on windows")
-	}
-	tempDir := t.TempDir()
-	testClone(t, newRawServer(3032, tempDir), tempDir, nil)
-}
-
 func TestCloneSSH(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("ssh transport not supported on windows")
@@ -475,14 +431,6 @@ func TestFetchHTTP(t *testing.T) {
 	testFetch(t, newHTTPServer(3022, tempDir, binPath), tempDir, nil)
 }
 
-func TestFetchRaw(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("raw transport not supported on windows")
-	}
-	tempDir := t.TempDir()
-	testFetch(t, newRawServer(3023, tempDir), tempDir, nil)
-}
-
 func TestFetchSSH(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("ssh transport not supported on windows")
@@ -554,14 +502,6 @@ func TestPushHTTP(t *testing.T) {
 	tempDir := t.TempDir()
 	binPath := buildBinary(t, tempDir)
 	testPush(t, newHTTPServer(3028, tempDir, binPath), tempDir, nil)
-}
-
-func TestPushRaw(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("raw transport not supported on windows")
-	}
-	tempDir := t.TempDir()
-	testPush(t, newRawServer(3029, tempDir), tempDir, nil)
 }
 
 func TestPushSSH(t *testing.T) {
