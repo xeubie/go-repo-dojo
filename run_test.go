@@ -1388,6 +1388,255 @@ func TestRun(t *testing.T) {
 			t.Fatalf("log[3] = {%s, %q}, want {%s, %q}", entries[3].oid, entries[3].message, commit1, "first commit")
 		}
 	}
+
+	// config
+	{
+		err = Run(opts, []string{"config", "add", "core.editor", "vim"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("config add core.editor failed: %v", err)
+		}
+		err = Run(opts, []string{"config", "add", "branch.master.remote", "origin"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("config add branch.master.remote failed: %v", err)
+		}
+
+		{
+			repo, err := OpenRepo(workPath, opts)
+			if err != nil {
+				t.Fatalf("open repo failed: %v", err)
+			}
+			config, err := repo.ListConfig()
+			if err != nil {
+				t.Fatalf("list config failed: %v", err)
+			}
+
+			coreSection := findConfigSection(config, "core")
+			if coreSection == nil {
+				t.Fatal("core section not found")
+			}
+			if len(coreSection.variables) != 1 {
+				t.Fatalf("core variable count = %d, want 1", len(coreSection.variables))
+			}
+
+			branchSection := findConfigSection(config, "branch.master")
+			if branchSection == nil {
+				t.Fatal("branch.master section not found")
+			}
+			if len(branchSection.variables) != 1 {
+				t.Fatalf("branch.master variable count = %d, want 1", len(branchSection.variables))
+			}
+			if val := findConfigVar(branchSection, "remote"); val != "origin" {
+				t.Fatalf("branch.master.remote = %q, want %q", val, "origin")
+			}
+		}
+
+		err = Run(opts, []string{"config", "rm", "branch.master.remote"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("config rm branch.master.remote failed: %v", err)
+		}
+
+		{
+			repo, err := OpenRepo(workPath, opts)
+			if err != nil {
+				t.Fatalf("open repo failed: %v", err)
+			}
+			config, err := repo.ListConfig()
+			if err != nil {
+				t.Fatalf("list config failed: %v", err)
+			}
+			if findConfigSection(config, "branch.master") != nil {
+				t.Fatal("branch.master section should not exist after rm")
+			}
+		}
+
+		// don't allow invalid names
+		err = Run(opts, []string{"config", "add", "core.editor#hi", "vim"}, workPath, runOpts)
+		if err == nil {
+			t.Fatal("expected error for invalid config name")
+		}
+
+		// do allow values with spaces
+		err = Run(opts, []string{"config", "add", "user.name", "radar", "roark"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("config add user.name failed: %v", err)
+		}
+		{
+			repo, err := OpenRepo(workPath, opts)
+			if err != nil {
+				t.Fatalf("open repo failed: %v", err)
+			}
+			config, err := repo.ListConfig()
+			if err != nil {
+				t.Fatalf("list config failed: %v", err)
+			}
+			userSection := findConfigSection(config, "user")
+			if userSection == nil {
+				t.Fatal("user section not found")
+			}
+			if val := findConfigVar(userSection, "name"); val != "radar roark" {
+				t.Fatalf("user.name = %q, want %q", val, "radar roark")
+			}
+		}
+
+		// do allow additional characters in subsection names
+		err = Run(opts, []string{"config", "add", "branch.\"hello.world\".remote", "radar roark"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("config add branch.hello.world.remote failed: %v", err)
+		}
+		{
+			repo, err := OpenRepo(workPath, opts)
+			if err != nil {
+				t.Fatalf("open repo failed: %v", err)
+			}
+			config, err := repo.ListConfig()
+			if err != nil {
+				t.Fatalf("list config failed: %v", err)
+			}
+			section := findConfigSection(config, "branch.\"hello.world\"")
+			if section == nil {
+				t.Fatal("branch.\"hello.world\" section not found")
+			}
+			if len(section.variables) != 1 {
+				t.Fatalf("branch.\"hello.world\" variable count = %d, want 1", len(section.variables))
+			}
+		}
+
+		// section and var names are forcibly lower-cased, but not the subsection name
+		err = Run(opts, []string{"config", "add", "BRANCH.MASTER.REMOTE", "origin"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("config add BRANCH.MASTER.REMOTE failed: %v", err)
+		}
+		{
+			repo, err := OpenRepo(workPath, opts)
+			if err != nil {
+				t.Fatalf("open repo failed: %v", err)
+			}
+			config, err := repo.ListConfig()
+			if err != nil {
+				t.Fatalf("list config failed: %v", err)
+			}
+			section := findConfigSection(config, "branch.MASTER")
+			if section == nil {
+				t.Fatal("branch.MASTER section not found")
+			}
+			if len(section.variables) != 1 {
+				t.Fatalf("branch.MASTER variable count = %d, want 1", len(section.variables))
+			}
+			if val := findConfigVar(section, "remote"); val != "origin" {
+				t.Fatalf("branch.MASTER.remote = %q, want %q", val, "origin")
+			}
+		}
+
+		err = Run(opts, []string{"config", "list"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("config list failed: %v", err)
+		}
+	}
+
+	// remote
+	{
+		err = Run(opts, []string{"remote", "add", "origin", "http://localhost:3000"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("remote add origin failed: %v", err)
+		}
+		{
+			repo, err := OpenRepo(workPath, opts)
+			if err != nil {
+				t.Fatalf("open repo failed: %v", err)
+			}
+			remote, err := repo.ListRemotes()
+			if err != nil {
+				t.Fatalf("list remotes failed: %v", err)
+			}
+			if findConfigSection(remote, "origin") == nil {
+				t.Fatal("origin remote not found")
+			}
+		}
+
+		err = Run(opts, []string{"remote", "rm", "origin"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("remote rm origin failed: %v", err)
+		}
+		{
+			repo, err := OpenRepo(workPath, opts)
+			if err != nil {
+				t.Fatalf("open repo failed: %v", err)
+			}
+			remote, err := repo.ListRemotes()
+			if err != nil {
+				t.Fatalf("list remotes failed: %v", err)
+			}
+			if findConfigSection(remote, "origin") != nil {
+				t.Fatal("origin remote should not exist after rm")
+			}
+		}
+
+		err = Run(opts, []string{"remote", "list"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("remote list failed: %v", err)
+		}
+	}
+
+	// tag
+	{
+		err = Run(opts, []string{"tag", "add", "ann", "-m", "this is an annotated tag"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("tag add ann failed: %v", err)
+		}
+
+		{
+			repo, err := OpenRepo(workPath, opts)
+			if err != nil {
+				t.Fatalf("open repo failed: %v", err)
+			}
+
+			tagOID, err := repo.ReadRef(Ref{Kind: RefTag, Name: "ann"})
+			if err != nil {
+				t.Fatalf("read tag ref failed: %v", err)
+			}
+
+			obj, err := repo.NewObject(tagOID, true)
+			if err != nil {
+				t.Fatalf("read tag object failed: %v", err)
+			}
+			defer obj.Close()
+
+			if obj.Tag == nil {
+				t.Fatal("expected tag content")
+			}
+			if obj.Tag.Message != "this is an annotated tag" {
+				t.Fatalf("tag message = %q, want %q", obj.Tag.Message, "this is an annotated tag")
+			}
+		}
+
+		err = Run(opts, []string{"tag", "list"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("tag list failed: %v", err)
+		}
+
+		err = Run(opts, []string{"tag", "rm", "ann"}, workPath, runOpts)
+		if err != nil {
+			t.Fatalf("tag rm ann failed: %v", err)
+		}
+	}
+}
+
+func findConfigSection(config *Config, name string) *configSection {
+	for i := range config.sections {
+		if config.sections[i].name == name {
+			return &config.sections[i]
+		}
+	}
+	return nil
+}
+
+func findConfigVar(section *configSection, name string) string {
+	for _, v := range section.variables {
+		if v.name == name {
+			return v.value
+		}
+	}
+	return ""
 }
 
 func countIndexEntries(idx *Index) int {
