@@ -40,12 +40,13 @@ func runGitOnServer(t *testing.T, server testServer, dir string, args ...string)
 type httpServer struct {
 	port     int
 	tempDir  string
+	binPath  string
 	listener net.Listener
 	server   *http.Server
 }
 
-func newHTTPServer(port int, tempDir string) *httpServer {
-	return &httpServer{port: port, tempDir: tempDir}
+func newHTTPServer(port int, tempDir string, binPath string) *httpServer {
+	return &httpServer{port: port, tempDir: tempDir, binPath: binPath}
 }
 
 func (s *httpServer) start(t *testing.T) {
@@ -62,15 +63,11 @@ func (s *httpServer) start(t *testing.T) {
 		t.Fatalf("abs temp dir failed: %v", err)
 	}
 
-	gitPath, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatalf("git not found: %v", err)
-	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		pathTranslated := filepath.Join(absTempDir, r.URL.Path)
 		handler := &cgi.Handler{
-			Path: gitPath,
+			Path: s.binPath,
 			Args: []string{"http-backend"},
 			Env: []string{
 				"GIT_PROJECT_ROOT=" + absTempDir,
@@ -232,6 +229,17 @@ func (s *sshServer) sshConfigArg() string {
 	return fmt.Sprintf("core.sshCommand=ssh -o StrictHostKeyChecking=no -o IdentityFile=%s", privKeyPath)
 }
 
+func buildBinary(t *testing.T, tempDir string) string {
+	t.Helper()
+	binPath := filepath.Join(tempDir, "repomofo")
+	cmd := exec.Command("go", "build", "-o", binPath, "./cmd/repomofo")
+	cmd.Dir = "."
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build repomofo binary failed: %v\n%s", err, out)
+	}
+	return binPath
+}
+
 // --- Helpers ---
 
 func waitForPort(t *testing.T, port int) {
@@ -352,7 +360,8 @@ func modifyGoFiles(t *testing.T, dir string) {
 
 func TestCloneHTTP(t *testing.T) {
 	tempDir := t.TempDir()
-	testClone(t, newHTTPServer(3031, tempDir), tempDir, nil)
+	binPath := buildBinary(t, tempDir)
+	testClone(t, newHTTPServer(3031, tempDir, binPath), tempDir, nil)
 }
 
 func TestCloneRaw(t *testing.T) {
@@ -368,14 +377,7 @@ func TestCloneSSH(t *testing.T) {
 		t.Skip("ssh transport not supported on windows")
 	}
 	tempDir := t.TempDir()
-
-	binPath := filepath.Join(tempDir, "repomofo")
-	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/repomofo")
-	buildCmd.Dir = "."
-	if out, err := buildCmd.CombinedOutput(); err != nil {
-		t.Fatalf("build repomofo binary failed: %v\n%s", err, out)
-	}
-
+	binPath := buildBinary(t, tempDir)
 	extraArgs := []string{"--upload-pack", binPath + " upload-pack"}
 	testClone(t, newSSHServer(3033, tempDir), tempDir, extraArgs)
 }
@@ -465,7 +467,8 @@ func testClone(t *testing.T, server testServer, tempDir string, extraArgs []stri
 
 func TestFetchHTTP(t *testing.T) {
 	tempDir := t.TempDir()
-	testFetch(t, newHTTPServer(3022, tempDir), tempDir, nil)
+	binPath := buildBinary(t, tempDir)
+	testFetch(t, newHTTPServer(3022, tempDir, binPath), tempDir, nil)
 }
 
 func TestFetchRaw(t *testing.T) {
@@ -481,14 +484,7 @@ func TestFetchSSH(t *testing.T) {
 		t.Skip("ssh transport not supported on windows")
 	}
 	tempDir := t.TempDir()
-
-	binPath := filepath.Join(tempDir, "repomofo")
-	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/repomofo")
-	buildCmd.Dir = "."
-	if out, err := buildCmd.CombinedOutput(); err != nil {
-		t.Fatalf("build repomofo binary failed: %v\n%s", err, out)
-	}
-
+	binPath := buildBinary(t, tempDir)
 	extraArgs := []string{"--upload-pack", binPath + " upload-pack"}
 	testFetch(t, newSSHServer(3024, tempDir), tempDir, extraArgs)
 }
@@ -552,7 +548,8 @@ func testFetch(t *testing.T, server testServer, tempDir string, extraArgs []stri
 
 func TestPushHTTP(t *testing.T) {
 	tempDir := t.TempDir()
-	testPush(t, newHTTPServer(3028, tempDir), tempDir, nil)
+	binPath := buildBinary(t, tempDir)
+	testPush(t, newHTTPServer(3028, tempDir, binPath), tempDir, nil)
 }
 
 func TestPushRaw(t *testing.T) {
@@ -568,15 +565,7 @@ func TestPushSSH(t *testing.T) {
 		t.Skip("ssh transport not supported on windows")
 	}
 	tempDir := t.TempDir()
-
-	// build the repomofo binary
-	binPath := filepath.Join(tempDir, "repomofo")
-	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/repomofo")
-	buildCmd.Dir = "."
-	if out, err := buildCmd.CombinedOutput(); err != nil {
-		t.Fatalf("build repomofo binary failed: %v\n%s", err, out)
-	}
-
+	binPath := buildBinary(t, tempDir)
 	extraArgs := []string{"--receive-pack", binPath + " receive-pack"}
 	testPush(t, newSSHServer(3030, tempDir), tempDir, extraArgs)
 }

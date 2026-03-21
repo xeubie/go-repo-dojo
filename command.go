@@ -28,6 +28,7 @@ const (
 	CommandRemote
 	CommandReceivePack
 	CommandUploadPack
+	CommandHTTPBackend
 )
 
 var commandNames = map[CommandKind]string{
@@ -50,6 +51,7 @@ var commandNames = map[CommandKind]string{
 	CommandRemote:      "remote",
 	CommandReceivePack: "receive-pack",
 	CommandUploadPack:  "upload-pack",
+	CommandHTTPBackend: "http-backend",
 }
 
 var commandDescrips = map[CommandKind]string{
@@ -72,6 +74,7 @@ var commandDescrips = map[CommandKind]string{
 	CommandRemote:      "add, remove, and list remotes.",
 	CommandReceivePack: "receive what is pushed into the repository.",
 	CommandUploadPack:  "send what is fetched from the repository.",
+	CommandHTTPBackend: "a CGI program forwarding receive-pack and upload-pack over HTTP.",
 }
 
 var commandExamples = map[CommandKind]string{
@@ -133,6 +136,7 @@ list remotes:
     repomofo remote list`,
 	CommandReceivePack: `repomofo receive-pack <directory>`,
 	CommandUploadPack:  `repomofo upload-pack <directory>`,
+	CommandHTTPBackend: `repomofo http-backend`,
 }
 
 // valueFlags are flags that can have a value associated with them.
@@ -585,6 +589,12 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			},
 		}}
 
+	case CommandHTTPBackend:
+		if len(cmdArgs.PositionalArgs) != 0 {
+			return nil
+		}
+		return &Command{Kind: CommandHTTPBackend}
+
 	case CommandConfig, CommandRemote:
 		if len(cmdArgs.PositionalArgs) == 0 {
 			return nil
@@ -710,7 +720,7 @@ func PrintHelp(cmdKind *CommandKind, w io.Writer) {
 		}
 	} else {
 		fmt.Fprintf(w, "help: repomofo <command> [<args>]\n\n")
-		for kind := CommandInit; kind <= CommandUploadPack; kind++ {
+		for kind := CommandInit; kind <= CommandHTTPBackend; kind++ {
 			name := commandNames[kind]
 			printAligned(w, name, commandDescrips[kind], indent)
 		}

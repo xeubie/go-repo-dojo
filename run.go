@@ -452,6 +452,65 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 		options := cmd.UploadPack.Options
 		options.ProtocolVersion = detectProtocolVersion()
 		return repo.UploadPack(os.Stdin, os.Stdout, options)
+	case CommandHTTPBackend:
+		path := os.Getenv("PATH_TRANSLATED")
+		if root := os.Getenv("GIT_PROJECT_ROOT"); root != "" {
+			pathInfo := os.Getenv("PATH_INFO")
+			if pathInfo == "" {
+				SendNotFound(os.Stdout)
+				return nil
+			}
+			if strings.Contains(pathInfo, "..") {
+				SendNotFound(os.Stdout)
+				return nil
+			}
+			path = root + pathInfo
+		} else if strings.Contains(path, "..") {
+			SendNotFound(os.Stdout)
+			return nil
+		}
+
+		handler, suffix, ok := MatchHTTPRoute(path)
+		if !ok {
+			SendNotFound(os.Stdout)
+			return nil
+		}
+
+		dir, err := ResolveHTTPBackendDir(path)
+		if err != nil {
+			SendNotFound(os.Stdout)
+			return nil
+		}
+
+		dir, err = filepath.Abs(dir)
+		if err != nil {
+			SendNotFound(os.Stdout)
+			return nil
+		}
+
+		repo, err := OpenRepo(dir, opts)
+		if err != nil {
+			SendNotFound(os.Stdout)
+			return nil
+		}
+
+		requestMethod := os.Getenv("REQUEST_METHOD")
+		if requestMethod == "" {
+			requestMethod = "GET"
+		}
+		if requestMethod == "HEAD" {
+			requestMethod = "GET"
+		}
+
+		return repo.HTTPBackend(os.Stdin, os.Stdout, HTTPBackendOptions{
+			RequestMethod:   requestMethod,
+			Handler:         handler,
+			Suffix:          suffix,
+			QueryString:     os.Getenv("QUERY_STRING"),
+			ContentType:     os.Getenv("CONTENT_TYPE"),
+			HasRemoteUser:   os.Getenv("REMOTE_USER") != "",
+			ProtocolVersion: detectProtocolVersion(),
+		})
 	}
 	return fmt.Errorf("unknown command")
 }
