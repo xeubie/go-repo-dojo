@@ -87,9 +87,9 @@ func (repo *Repo) removeBranch(input RemoveBranchInput) error {
 	return nil
 }
 
-func (repo *Repo) listBranches() ([]string, error) {
+func (repo *Repo) listBranches() (*RefIterator, error) {
 	headsDir := filepath.Join(repo.repoDir, "refs", "heads")
-	return listRefsRecursive(headsDir, "")
+	return newRefIterator(headsDir, RefHead)
 }
 
 // HeadResult represents what HEAD points to.

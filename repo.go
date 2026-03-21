@@ -286,7 +286,7 @@ func (r *Repo) RemoveBranch(input RemoveBranchInput) error {
 	return r.removeBranch(input)
 }
 
-func (r *Repo) ListBranches() ([]string, error) {
+func (r *Repo) ListBranches() (*RefIterator, error) {
 	return r.listBranches()
 }
 
@@ -298,6 +298,6 @@ func (r *Repo) RemoveTag(input RemoveTagInput) error {
 	return r.removeTag(input)
 }
 
-func (r *Repo) ListTags() ([]string, error) {
+func (r *Repo) ListTags() (*RefIterator, error) {
 	return r.listTags()
 }

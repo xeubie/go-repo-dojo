@@ -13,6 +13,30 @@ var (
 
 const refStartStr = "ref: "
 
+func ValidateRefName(name string) bool {
+	if len(name) == 0 || len(name) > 255 {
+		return false
+	}
+	if name[0] == '-' || name[len(name)-1] == '.' {
+		return false
+	}
+	if strings.Contains(name, "..") || strings.Contains(name, "@{") {
+		return false
+	}
+	for _, c := range name {
+		if c <= 0x1F || c == 0x7F || c == ' ' || c == '~' || c == '^' ||
+			c == ':' || c == '?' || c == '*' || c == '[' || c == '\\' {
+			return false
+		}
+	}
+	for _, part := range strings.Split(name, "/") {
+		if len(part) == 0 || part[0] == '.' || strings.HasSuffix(part, ".lock") {
+			return false
+		}
+	}
+	return true
+}
+
 type RefKind int
 
 const (
@@ -119,28 +143,88 @@ func isHexString(s string) bool {
 	return true
 }
 
-func ValidateRefName(name string) bool {
-	if len(name) == 0 || len(name) > 255 {
-		return false
-	}
-	if name[0] == '-' || name[len(name)-1] == '.' {
-		return false
-	}
-	if strings.Contains(name, "..") || strings.Contains(name, "@{") {
-		return false
-	}
-	for _, c := range name {
-		if c <= 0x1F || c == 0x7F || c == ' ' || c == '~' || c == '^' ||
-			c == ':' || c == '?' || c == '*' || c == '[' || c == '\\' {
-			return false
+// RefIterator iterates over refs in a directory using a stack-based
+// depth-first traversal, so it doesn't load all refs into memory at once.
+type RefIterator struct {
+	stack   []refIterStackEntry
+	refKind RefKind
+}
+
+type refIterStackEntry struct {
+	dir     *os.File
+	entries []os.DirEntry
+	index   int
+	prefix  string
+}
+
+func newRefIterator(dir string, refKind RefKind) (*RefIterator, error) {
+	f, err := os.Open(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &RefIterator{refKind: refKind}, nil
 		}
+		return nil, err
 	}
-	for _, part := range strings.Split(name, "/") {
-		if len(part) == 0 || part[0] == '.' || strings.HasSuffix(part, ".lock") {
-			return false
+	entries, err := f.ReadDir(-1)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	return &RefIterator{
+		stack:   []refIterStackEntry{{dir: f, entries: entries, prefix: ""}},
+		refKind: refKind,
+	}, nil
+}
+
+// Next returns the next ref, or nil when iteration is complete.
+func (it *RefIterator) Next() (*Ref, error) {
+	for len(it.stack) > 0 {
+		top := &it.stack[len(it.stack)-1]
+		if top.index >= len(top.entries) {
+			top.dir.Close()
+			it.stack = it.stack[:len(it.stack)-1]
+			continue
 		}
+		entry := top.entries[top.index]
+		top.index++
+
+		name := entry.Name()
+		fullPrefix := name
+		if top.prefix != "" {
+			fullPrefix = top.prefix + "/" + name
+		}
+
+		if entry.IsDir() {
+			path := filepath.Join(top.dir.Name(), name)
+			f, err := os.Open(path)
+			if err != nil {
+				return nil, err
+			}
+			entries, err := f.ReadDir(-1)
+			if err != nil {
+				f.Close()
+				return nil, err
+			}
+			it.stack = append(it.stack, refIterStackEntry{
+				dir:     f,
+				entries: entries,
+				prefix:  fullPrefix,
+			})
+			continue
+		}
+
+		ref := Ref{Kind: it.refKind, Name: fullPrefix}
+		return &ref, nil
 	}
-	return true
+	return nil, nil
+}
+
+// Close releases all open directory handles.
+func (it *RefIterator) Close() {
+	for _, entry := range it.stack {
+		entry.dir.Close()
+	}
+	it.stack = nil
 }
 
 // readRef reads a ref from the repo dir.

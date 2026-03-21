@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"sort"
 )
 
 type AddTagInput struct {
@@ -62,36 +61,7 @@ func (repo *Repo) removeTag(input RemoveTagInput) error {
 	return nil
 }
 
-func (repo *Repo) listTags() ([]string, error) {
+func (repo *Repo) listTags() (*RefIterator, error) {
 	tagsDir := filepath.Join(repo.repoDir, "refs", "tags")
-	return listRefsRecursive(tagsDir, "")
-}
-
-func listRefsRecursive(dir, prefix string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	var names []string
-	for _, e := range entries {
-		name := e.Name()
-		if prefix != "" {
-			name = prefix + "/" + name
-		}
-		if e.IsDir() {
-			sub, err := listRefsRecursive(filepath.Join(dir, e.Name()), name)
-			if err != nil {
-				return nil, err
-			}
-			names = append(names, sub...)
-		} else {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return names, nil
+	return newRefIterator(tagsDir, RefTag)
 }

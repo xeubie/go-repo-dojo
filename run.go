@@ -161,12 +161,20 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 
 		switch cmd.Tag.SubKind {
 		case TagList:
-			tags, err := repo.ListTags()
+			iter, err := repo.ListTags()
 			if err != nil {
 				return err
 			}
-			for _, name := range tags {
-				fmt.Fprintf(runOpts.Out, "%s\n", name)
+			defer iter.Close()
+			for {
+				ref, err := iter.Next()
+				if err != nil {
+					return err
+				}
+				if ref == nil {
+					break
+				}
+				fmt.Fprintf(runOpts.Out, "%s\n", ref.Name)
 			}
 			return nil
 		case TagAdd:
@@ -238,16 +246,24 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 				currentBranch = head.Ref.Name
 			}
 
-			branches, err := repo.ListBranches()
+			iter, err := repo.ListBranches()
 			if err != nil {
 				return err
 			}
-			for _, name := range branches {
+			defer iter.Close()
+			for {
+				ref, err := iter.Next()
+				if err != nil {
+					return err
+				}
+				if ref == nil {
+					break
+				}
 				prefix := " "
-				if name == currentBranch {
+				if ref.Name == currentBranch {
 					prefix = "*"
 				}
-				fmt.Fprintf(runOpts.Out, "%s %s\n", prefix, name)
+				fmt.Fprintf(runOpts.Out, "%s %s\n", prefix, ref.Name)
 			}
 			return nil
 		case BranchAdd:

@@ -1136,13 +1136,25 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open repo failed: %v", err)
 		}
-		branches, err := repo.listBranches()
+		iter, err := repo.listBranches()
 		repo.Close()
 		if err != nil {
 			t.Fatalf("list branches failed: %v", err)
 		}
-		if len(branches) != 2 {
-			t.Fatalf("branch count = %d, want 2: %v", len(branches), branches)
+		defer iter.Close()
+		count := 0
+		for {
+			ref, err := iter.Next()
+			if err != nil {
+				t.Fatalf("branch iter next failed: %v", err)
+			}
+			if ref == nil {
+				break
+			}
+			count++
+		}
+		if count != 2 {
+			t.Fatalf("branch count = %d, want 2", count)
 		}
 	}
 
@@ -1247,21 +1259,29 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open repo failed: %v", err)
 		}
-		branches, err := repo.listBranches()
+		iter, err := repo.listBranches()
 		repo.Close()
 		if err != nil {
 			t.Fatalf("list branches failed: %v", err)
 		}
-		if len(branches) != 3 {
-			t.Fatalf("branch count = %d, want 3: %v", len(branches), branches)
-		}
+		defer iter.Close()
 		branchSet := map[string]bool{}
-		for _, b := range branches {
-			branchSet[b] = true
+		for {
+			ref, err := iter.Next()
+			if err != nil {
+				t.Fatalf("branch iter next failed: %v", err)
+			}
+			if ref == nil {
+				break
+			}
+			branchSet[ref.Name] = true
+		}
+		if len(branchSet) != 3 {
+			t.Fatalf("branch count = %d, want 3", len(branchSet))
 		}
 		for _, name := range []string{"a/b/c", "stuff", "master"} {
 			if !branchSet[name] {
-				t.Fatalf("expected branch %q not found in %v", name, branches)
+				t.Fatalf("expected branch %q not found", name)
 			}
 		}
 	}
