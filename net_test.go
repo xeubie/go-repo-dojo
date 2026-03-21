@@ -231,7 +231,11 @@ func (s *sshServer) sshConfigArg() string {
 
 func buildBinary(t *testing.T, tempDir string) string {
 	t.Helper()
-	binPath := filepath.Join(tempDir, "repomofo")
+	binName := "repomofo"
+	if runtime.GOOS == "windows" {
+		binName += ".exe"
+	}
+	binPath := filepath.Join(tempDir, binName)
 	cmd := exec.Command("go", "build", "-o", binPath, "./cmd/repomofo")
 	cmd.Dir = "."
 	if out, err := cmd.CombinedOutput(); err != nil {
