@@ -266,21 +266,6 @@ func (repo *Repo) signContent(lines []string, signingKey string) ([]string, erro
 	return strings.Split(sigContent, "\n"), nil
 }
 
-func (repo *Repo) checkForUnfinishedMerge() error {
-	mergeHeadNames := []string{"MERGE_HEAD", "CHERRY_PICK_HEAD"}
-	for _, name := range mergeHeadNames {
-		ref := RefOrOid{IsRef: true, Ref: Ref{Kind: RefNone, Name: name}}
-		oid, err := repo.readRefRecur(ref)
-		if err != nil && !errors.Is(err, ErrRefNotFound) {
-			return err
-		}
-		if oid != "" {
-			return errors.New("unfinished merge in progress")
-		}
-	}
-	return nil
-}
-
 // writeCommit creates a new commit object and updates HEAD.
 func (repo *Repo) writeCommit(metadata CommitMetadata) (string, error) {
 	parentOIDs := metadata.ParentOIDs

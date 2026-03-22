@@ -755,6 +755,20 @@ var mergeHeadNames = []string{"MERGE_HEAD", "CHERRY_PICK_HEAD"}
 
 const mergeMsgName = "MERGE_MSG"
 
+func (repo *Repo) checkForUnfinishedMerge() error {
+	for _, name := range mergeHeadNames {
+		ref := RefOrOid{IsRef: true, Ref: Ref{Kind: RefNone, Name: name}}
+		oid, err := repo.readRefRecur(ref)
+		if err != nil && !errors.Is(err, ErrRefNotFound) {
+			return err
+		}
+		if oid != "" {
+			return errors.New("unfinished merge in progress")
+		}
+	}
+	return nil
+}
+
 func checkForOtherMerge(repo *Repo, mergeHeadName string) error {
 	for _, name := range mergeHeadNames {
 		if name == mergeHeadName {
