@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -340,75 +341,194 @@ func writeBlobWithDiff3(
 
 	diff3Iter := newDiff3Iterator(baseIter, targetIter, sourceIter)
 
-	targetMarker := fmt.Sprintf("<<<<<<< target (%s)", targetName)
-	baseMarker := fmt.Sprintf("||||||| base (%s)", baseOIDHex)
-	separateMarker := "======="
-	sourceMarker := fmt.Sprintf(">>>>>>> source (%s)", sourceName)
-
-	// first pass: build merged content to compute size
-	var mergedLines []string
-	conflict := false
-
-	for {
-		chunk, err := diff3Iter.next()
-		if err != nil {
-			return nil, err
-		}
-		if chunk == nil {
-			break
-		}
-
-		switch chunk.Kind {
-		case Diff3Clean:
-			if chunk.ORange != nil {
-				for lineNum := chunk.ORange.Begin; lineNum < chunk.ORange.End; lineNum++ {
-					line, err := baseIter.get(lineNum)
-					if err != nil {
-						return nil, err
-					}
-					mergedLines = append(mergedLines, line)
-				}
-			}
-		case Diff3Conflict:
-			baseLines := linesFromRange(baseIter, chunk.ORange)
-			targetLines := linesFromRange(targetIter, chunk.ARange)
-			sourceLines := linesFromRange(sourceIter, chunk.BRange)
-
-			// auto-resolve: if base == target or target == source, use source
-			if sliceEqual(baseLines, targetLines) || sliceEqual(targetLines, sourceLines) {
-				mergedLines = append(mergedLines, sourceLines...)
-				continue
-			}
-			// auto-resolve: if base == source, use target
-			if sliceEqual(baseLines, sourceLines) {
-				mergedLines = append(mergedLines, targetLines...)
-				continue
-			}
-
-			// real conflict
-			conflict = true
-			mergedLines = append(mergedLines, targetMarker)
-			mergedLines = append(mergedLines, targetLines...)
-			mergedLines = append(mergedLines, baseMarker)
-			mergedLines = append(mergedLines, baseLines...)
-			mergedLines = append(mergedLines, separateMarker)
-			mergedLines = append(mergedLines, sourceLines...)
-			mergedLines = append(mergedLines, sourceMarker)
-		}
+	stream := &diff3Stream{
+		baseIter:       baseIter,
+		targetIter:     targetIter,
+		sourceIter:     sourceIter,
+		diff3Iter:      diff3Iter,
+		targetMarker:   fmt.Sprintf("<<<<<<< target (%s)", targetName),
+		baseMarker:     fmt.Sprintf("||||||| base (%s)", baseOIDHex),
+		separateMarker: "=======",
+		sourceMarker:   fmt.Sprintf(">>>>>>> source (%s)", sourceName),
 	}
 
-	*hasConflict = conflict
-
-	// build content
-	content := strings.Join(mergedLines, "\n")
-	if len(mergedLines) > 0 {
-		content += "\n"
+	// first pass: count bytes
+	size, err := stream.count()
+	if err != nil {
+		return nil, err
 	}
+	*hasConflict = stream.hasConflict
+
+	// second pass: stream content into writeObject
+	stream.seekTo()
 
 	return repo.store.WriteObject(
-		ObjectHeader{Kind: ObjectKindBlob, Size: uint64(len(content))},
-		strings.NewReader(content),
+		ObjectHeader{Kind: ObjectKindBlob, Size: uint64(size)},
+		stream,
 	)
+}
+
+// diff3Stream implements io.Reader, producing merged content on-the-fly.
+type diff3Stream struct {
+	baseIter       *LineIterator
+	targetIter     *LineIterator
+	sourceIter     *LineIterator
+	diff3Iter      *Diff3Iterator
+	targetMarker   string
+	baseMarker     string
+	separateMarker string
+	sourceMarker   string
+	lineBuffer     []string
+	currentLine    *string
+	hasConflict    bool
+}
+
+func (s *diff3Stream) Read(buf []byte) (int, error) {
+	size := 0
+	for size < len(buf) {
+		n, err := s.readStep(buf[size:])
+		if err != nil {
+			return size, err
+		}
+		if n == 0 {
+			if size == 0 {
+				return 0, io.EOF
+			}
+			break
+		}
+		size += n
+	}
+	return size, nil
+}
+
+func (s *diff3Stream) readStep(buf []byte) (int, error) {
+	if s.currentLine != nil {
+		line := *s.currentLine
+		size := len(line)
+		if size > len(buf) {
+			size = len(buf)
+		}
+		lineFinished := len(line) == 0
+		if size > 0 {
+			copy(buf[:size], line[:size])
+			remaining := line[size:]
+			lineFinished = len(remaining) == 0
+			if lineFinished {
+				s.currentLine = nil
+			} else {
+				s.currentLine = &remaining
+			}
+		}
+		// if we have copied the entire line
+		if lineFinished {
+			// if there is room for the newline character
+			if len(buf) > size {
+				// remove the line from the line buffer
+				s.lineBuffer = s.lineBuffer[1:]
+				if len(s.lineBuffer) > 0 {
+					s.currentLine = &s.lineBuffer[0]
+				} else {
+					s.currentLine = nil
+				}
+				// if we aren't at the very last line, add a newline character
+				if s.currentLine != nil || !s.diff3Iter.Finished {
+					buf[size] = '\n'
+					return size + 1, nil
+				}
+			}
+		}
+		return size, nil
+	}
+
+	chunk, err := s.diff3Iter.next()
+	if err != nil {
+		return 0, err
+	}
+	if chunk == nil {
+		return 0, nil
+	}
+
+	switch chunk.Kind {
+	case Diff3Clean:
+		if chunk.ORange != nil {
+			for lineNum := chunk.ORange.Begin; lineNum < chunk.ORange.End; lineNum++ {
+				line, err := s.baseIter.get(lineNum)
+				if err != nil {
+					return 0, err
+				}
+				s.lineBuffer = append(s.lineBuffer, line)
+			}
+			if len(s.lineBuffer) > 0 {
+				s.currentLine = &s.lineBuffer[0]
+			}
+		}
+	case Diff3Conflict:
+		baseLines := linesFromRange(s.baseIter, chunk.ORange)
+		targetLines := linesFromRange(s.targetIter, chunk.ARange)
+		sourceLines := linesFromRange(s.sourceIter, chunk.BRange)
+
+		// auto-resolve: if base == target or target == source, use source
+		if sliceEqual(baseLines, targetLines) || sliceEqual(targetLines, sourceLines) {
+			s.lineBuffer = append(s.lineBuffer, sourceLines...)
+			if len(s.lineBuffer) > 0 {
+				s.currentLine = &s.lineBuffer[0]
+			}
+			return s.readStep(buf)
+		}
+		// auto-resolve: if base == source, use target
+		if sliceEqual(baseLines, sourceLines) {
+			s.lineBuffer = append(s.lineBuffer, targetLines...)
+			if len(s.lineBuffer) > 0 {
+				s.currentLine = &s.lineBuffer[0]
+			}
+			return s.readStep(buf)
+		}
+
+		// real conflict
+		s.lineBuffer = append(s.lineBuffer, s.targetMarker)
+		s.lineBuffer = append(s.lineBuffer, targetLines...)
+		s.lineBuffer = append(s.lineBuffer, s.baseMarker)
+		s.lineBuffer = append(s.lineBuffer, baseLines...)
+		s.lineBuffer = append(s.lineBuffer, s.separateMarker)
+		s.lineBuffer = append(s.lineBuffer, sourceLines...)
+		s.lineBuffer = append(s.lineBuffer, s.sourceMarker)
+		if len(s.lineBuffer) > 0 {
+			s.currentLine = &s.lineBuffer[0]
+		}
+		s.hasConflict = true
+	}
+
+	return s.readStep(buf)
+}
+
+func (s *diff3Stream) seekTo() {
+	s.baseIter.reset()
+	s.targetIter.reset()
+	s.sourceIter.reset()
+	s.diff3Iter.reset()
+	s.lineBuffer = nil
+	s.currentLine = nil
+	s.hasConflict = false
+}
+
+func (s *diff3Stream) count() (int, error) {
+	s.seekTo()
+	n := 0
+	buf := make([]byte, 4096)
+	for {
+		size, err := s.Read(buf)
+		n += size
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+		if size == 0 {
+			break
+		}
+	}
+	return n, nil
 }
 
 func linesFromRange(iter *LineIterator, r *Diff3Range) []string {

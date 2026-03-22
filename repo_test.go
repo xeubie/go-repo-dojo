@@ -719,7 +719,7 @@ func TestMergeConflictSameFileAutoresolved(t *testing.T) {
 
 	// verify f.txt has been autoresolved
 	content := readWorkFile(t, repo, "f.txt")
-	if content != "x\nb\ny\n" {
+	if content != "x\nb\ny" {
 		t.Fatalf("expected autoresolved content, got %q", content)
 	}
 
@@ -1133,7 +1133,7 @@ func TestMergeConflictShuffle(t *testing.T) {
 
 		// git shuffles lines
 		content := readWorkFile(t, repo, "f.txt")
-		expected := "a\nx\nb\ng\na\nb\n"
+		expected := "a\nx\nb\ng\na\nb"
 		if content != expected {
 			t.Fatalf("expected %q, got %q", expected, content)
 		}
@@ -1259,8 +1259,7 @@ int slow_square(int x) {
   /* Question: what is the order of magnitude of this algorithm with respect to x? */
   for (int i = 0; i < x; i++) y += x;
   return y;
-}
-`
+}`
 		if content != expected {
 			t.Fatalf("unexpected merge result.\nexpected:\n%s\ngot:\n%s", expected, content)
 		}
