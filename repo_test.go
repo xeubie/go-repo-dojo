@@ -22,12 +22,23 @@ func addFile(t *testing.T, repo *Repo, path, content string) {
 }
 
 func TestSimple(t *testing.T) {
+	t.Run("FileObjectStore", func(t *testing.T) {
+		Simple(t, nil)
+	})
+	t.Run("MemoryObjectStore", func(t *testing.T) {
+		Simple(t, NewMemoryObjectStore(SHA1Hash))
+	})
+}
+
+func Simple(t *testing.T, store ObjectStore) {
+	t.Helper()
 	tempDir := t.TempDir()
 	workPath := filepath.Join(tempDir, "repo")
 
 	opts := RepoOpts{
 		Hash:   SHA1Hash,
 		IsTest: true,
+		Store:  store,
 	}
 
 	_, err := InitRepo(workPath, opts)

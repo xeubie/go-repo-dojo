@@ -2,7 +2,6 @@ package repomofo
 
 import (
 	"bytes"
-	"compress/zlib"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -58,82 +57,6 @@ type ObjectHeader struct {
 	Size uint64
 }
 
-// writeObject writes an object to loose storage by streaming from a reader.
-// The header is prepended and the content is hashed and zlib-compressed.
-func (repo *Repo) writeObject(header ObjectHeader, reader io.Reader) ([]byte, error) {
-	headerStr := fmt.Sprintf("%s %d\x00", header.Kind.Name(), header.Size)
-
-	tempFile, err := os.CreateTemp(repo.repoPath, "object.temp.*")
-	if err != nil {
-		return nil, err
-	}
-	tempPath := tempFile.Name()
-	defer os.Remove(tempPath)
-	defer tempFile.Close()
-
-	hasher := repo.opts.Hash.NewHasher()
-	hasher.Write([]byte(headerStr))
-	if _, err := tempFile.Write([]byte(headerStr)); err != nil {
-		return nil, err
-	}
-
-	w := io.MultiWriter(tempFile, hasher)
-	if _, err := io.Copy(w, reader); err != nil {
-		return nil, err
-	}
-
-	oidBytes := hasher.Sum(nil)
-	oidHex := hex.EncodeToString(oidBytes)
-
-	objDir := filepath.Join(repo.repoPath, "objects", oidHex[:2])
-	objPath := filepath.Join(objDir, oidHex[2:])
-	if _, err := os.Stat(objPath); err == nil {
-		return oidBytes, nil
-	}
-
-	if err := os.MkdirAll(objDir, 0755); err != nil {
-		return nil, err
-	}
-
-	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
-		return nil, err
-	}
-
-	lock, err := NewLockFile(objDir, oidHex[2:])
-	if err != nil {
-		return nil, err
-	}
-	defer lock.Close()
-
-	zlibW := zlib.NewWriter(lock.File)
-	if _, err := io.Copy(zlibW, tempFile); err != nil {
-		return nil, err
-	}
-	if err := zlibW.Close(); err != nil {
-		return nil, err
-	}
-
-	lock.Success = true
-	return oidBytes, nil
-}
-
-// readLooseObject reads and decompresses a loose git object.
-func (repo *Repo) readLooseObject(oidHex string) ([]byte, error) {
-	objPath := filepath.Join(repo.repoPath, "objects", oidHex[:2], oidHex[2:])
-	file, err := os.Open(objPath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	r, err := zlib.NewReader(file)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-
-	return io.ReadAll(r)
-}
 
 // parseObjectHeader parses a git object header from decompressed data.
 func parseObjectHeader(data []byte) (ObjectHeader, int, error) {
@@ -162,39 +85,37 @@ func parseObjectHeader(data []byte) (ObjectHeader, int, error) {
 	return ObjectHeader{Kind: kind, Size: size}, nullIdx + 1, nil
 }
 
-// readObjectKind reads a loose object and returns just its kind.
+// readObjectKind reads an object and returns just its kind.
 func (repo *Repo) readObjectKind(oidHex string) (ObjectKind, error) {
-	data, err := repo.readLooseObject(oidHex)
+	rdr, err := repo.store.ReadObject(oidHex)
 	if err != nil {
 		return 0, err
 	}
-	header, _, err := parseObjectHeader(data)
-	if err != nil {
-		return 0, err
-	}
-	return header.Kind, nil
+	defer rdr.Close()
+	return rdr.Header().Kind, nil
 }
 
 // readCommitTree reads a commit object and returns its tree hash hex string.
 func (repo *Repo) readCommitTree(oidHex string) (string, error) {
-	data, err := repo.readLooseObject(oidHex)
+	rdr, err := repo.store.ReadObject(oidHex)
 	if err != nil {
 		return "", err
 	}
-	_, contentStart, err := parseObjectHeader(data)
-	if err != nil {
-		return "", err
-	}
-	content := data[contentStart:]
+	defer rdr.Close()
 
-	if !bytes.HasPrefix(content, []byte("tree ")) {
+	data, err := io.ReadAll(rdr)
+	if err != nil {
+		return "", err
+	}
+
+	if !bytes.HasPrefix(data, []byte("tree ")) {
 		return "", errors.New("invalid commit: missing tree")
 	}
 	hexLen := repo.opts.Hash.HexLen()
-	if len(content) < 5+hexLen {
+	if len(data) < 5+hexLen {
 		return "", errors.New("invalid commit: tree hash too short")
 	}
-	treeHash := string(content[5 : 5+hexLen])
+	treeHash := string(data[5 : 5+hexLen])
 	return treeHash, nil
 }
 
@@ -283,21 +204,21 @@ func (repo *Repo) writeTree(tree *treeBuilder) ([]byte, error) {
 		content.Write(e.data)
 	}
 
-	return repo.writeObject(
+	return repo.store.WriteObject(
 		ObjectHeader{Kind: ObjectKindTree, Size: uint64(content.Len())},
 		&content,
 	)
 }
 
 func (repo *Repo) writeBlob(content []byte) ([]byte, error) {
-	return repo.writeObject(
+	return repo.store.WriteObject(
 		ObjectHeader{Kind: ObjectKindBlob, Size: uint64(len(content))},
 		bytes.NewReader(content),
 	)
 }
 
 func (repo *Repo) writeBlobFromReader(reader io.Reader, size uint64) ([]byte, error) {
-	return repo.writeObject(
+	return repo.store.WriteObject(
 		ObjectHeader{Kind: ObjectKindBlob, Size: size},
 		reader,
 	)
@@ -485,7 +406,7 @@ func (repo *Repo) writeCommit(metadata CommitMetadata) (string, error) {
 
 	commitContent := strings.Join(lines, "\n")
 
-	oidBytes, err := repo.writeObject(
+	oidBytes, err := repo.store.WriteObject(
 		ObjectHeader{Kind: ObjectKindCommit, Size: uint64(len(commitContent))},
 		strings.NewReader(commitContent),
 	)
@@ -558,7 +479,7 @@ func (repo *Repo) writeTag(input AddTagInput, targetOID string) (string, error) 
 
 	tagContent := strings.Join(lines, "\n")
 
-	oidBytes, err := repo.writeObject(
+	oidBytes, err := repo.store.WriteObject(
 		ObjectHeader{Kind: ObjectKindTag, Size: uint64(len(tagContent))},
 		strings.NewReader(tagContent),
 	)
@@ -583,8 +504,23 @@ type ObjectReader interface {
 	Position() uint64
 }
 
+// ---------------------------------------------------------------------------
+// ObjectStore – pluggable object storage backend
+// ---------------------------------------------------------------------------
+
+// ObjectStore is the interface for pluggable object storage backends.
+// Inspired by go-git's EncodedObjectStorer, but using go-repo-mofo's own types.
+type ObjectStore interface {
+	// ReadObject returns a streaming reader for the object with the given OID.
+	ReadObject(oidHex string) (ObjectReader, error)
+
+	// WriteObject writes an object and returns its raw OID hash bytes.
+	WriteObject(header ObjectHeader, reader io.Reader) ([]byte, error)
+
+}
+
 func (repo *Repo) NewObjectReader(oidHex string) (ObjectReader, error) {
-	return newObjectReader(repo, oidHex)
+	return repo.store.ReadObject(oidHex)
 }
 
 // ---------------------------------------------------------------------------
@@ -961,15 +897,16 @@ func (it *ObjectIterator) includeContentRefs(obj *Object, childDepth int) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// CopyFromPackIterator – writes pack objects as loose objects
-// ---------------------------------------------------------------------------
-
+// CopyFromPackIterator writes pack objects as loose objects.
+// Delegates to FileObjectStore if the store supports it.
 func (repo *Repo) CopyFromPackIterator(iter *PackIterator) error {
+	if fs, ok := repo.store.(*FileObjectStore); ok {
+		return fs.CopyFromPackIterator(iter)
+	}
+	// Generic fallback: read each object and write through the store.
 	offsetToOID := make(map[uint64][]byte)
-
 	for {
-		por, err := iter.Next(repo, offsetToOID)
+		por, err := iter.Next(repo.store, offsetToOID)
 		if err != nil {
 			return err
 		}
@@ -980,7 +917,7 @@ func (repo *Repo) CopyFromPackIterator(iter *PackIterator) error {
 		startPos := iter.StartPosition()
 		header := por.Header()
 
-		oidBytes, err := repo.writeObject(header, por)
+		oidBytes, err := repo.store.WriteObject(header, por)
 		por.Close()
 		if err != nil {
 			return err

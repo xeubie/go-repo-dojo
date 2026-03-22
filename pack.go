@@ -540,7 +540,7 @@ func initPackObjectReaderAtPosition(pr PackReader, position uint64) (*PackObject
 }
 
 // initDelta reads delta instructions from the zlib stream and sets up the base reader.
-func (por *PackObjectReader) initDelta(repo *Repo) error {
+func (por *PackObjectReader) initDelta(store ObjectStore) error {
 	var baseReader ObjectReader
 
 	if por.deltaRefKind == deltaRefOfs {
@@ -555,7 +555,7 @@ func (por *PackObjectReader) initDelta(repo *Repo) error {
 		}
 		baseReader = basePack
 	} else {
-		lr, err := newObjectReader(repo, por.deltaRefOIDHex)
+		lr, err := store.ReadObject(por.deltaRefOIDHex)
 		if err != nil {
 			return err
 		}
@@ -684,11 +684,11 @@ func (por *PackObjectReader) initDelta(repo *Repo) error {
 
 // initDeltaAndCache initialises the full delta chain iteratively (not recursively)
 // to avoid stack overflow on deep chains, then caches base data.
-func (por *PackObjectReader) initDeltaAndCache(repo *Repo) error {
+func (por *PackObjectReader) initDeltaAndCache(store ObjectStore) error {
 	var deltaObjects []*PackObjectReader
 	last := por
 	for last.mode != packObjectBasic {
-		if err := last.initDelta(repo); err != nil {
+		if err := last.initDelta(store); err != nil {
 			return err
 		}
 		deltaObjects = append(deltaObjects, last)
@@ -939,114 +939,6 @@ func (por *PackObjectReader) SkipBytes(n uint64) error {
 }
 
 // ---------------------------------------------------------------------------
-// ObjectReader
-// ---------------------------------------------------------------------------
-
-type LooseObjectReader struct {
-	file       *os.File
-	zlibReader io.ReadCloser
-	header     ObjectHeader
-}
-
-func openLooseObject(repo *Repo, oidHex string) (*LooseObjectReader, error) {
-	objPath := filepath.Join(repo.repoPath, "objects", oidHex[:2], oidHex[2:])
-	f, err := os.Open(objPath)
-	if err != nil {
-		return nil, err
-	}
-	zlibR, err := zlib.NewReader(f)
-	if err != nil {
-		f.Close()
-		return nil, err
-	}
-	header, err := parseObjectHeaderFromReader(zlibR)
-	if err != nil {
-		zlibR.Close()
-		f.Close()
-		return nil, err
-	}
-	return &LooseObjectReader{file: f, zlibReader: zlibR, header: header}, nil
-}
-
-func (r *LooseObjectReader) Close() {
-	if r.zlibReader != nil {
-		r.zlibReader.Close()
-	}
-	if r.file != nil {
-		r.file.Close()
-	}
-}
-
-func (r *LooseObjectReader) Reset() error {
-	if r.zlibReader != nil {
-		r.zlibReader.Close()
-	}
-	if _, err := r.file.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-	zlibR, err := zlib.NewReader(r.file)
-	if err != nil {
-		return err
-	}
-	r.zlibReader = zlibR
-	// skip header bytes (up to and including null)
-	for {
-		var buf [1]byte
-		if _, err := io.ReadFull(r.zlibReader, buf[:]); err != nil {
-			return err
-		}
-		if buf[0] == 0 {
-			break
-		}
-	}
-	return nil
-}
-
-func (r *LooseObjectReader) Read(p []byte) (int, error) {
-	return r.zlibReader.Read(p)
-}
-
-func (r *LooseObjectReader) Header() ObjectHeader {
-	return r.header
-}
-
-func (r *LooseObjectReader) SkipBytes(n uint64) error {
-	var buf [512]byte
-	rem := n
-	for rem > 0 {
-		toRead := rem
-		if toRead > uint64(len(buf)) {
-			toRead = uint64(len(buf))
-		}
-		nr, err := r.Read(buf[:toRead])
-		if nr == 0 && err != nil {
-			return err
-		}
-		rem -= uint64(nr)
-	}
-	return nil
-}
-
-func (r *LooseObjectReader) Position() uint64 {
-	return 0
-}
-
-func newObjectReader(repo *Repo, oidHex string) (ObjectReader, error) {
-	loose, err := openLooseObject(repo, oidHex)
-	if err == nil {
-		return loose, nil
-	}
-	if !os.IsNotExist(err) {
-		return nil, err
-	}
-	pack, err := newPackObjectReaderFromIndex(repo, oidHex)
-	if err != nil {
-		return nil, err
-	}
-	return pack, nil
-}
-
-// ---------------------------------------------------------------------------
 // PackIterator
 // ---------------------------------------------------------------------------
 
@@ -1092,7 +984,7 @@ func (it *PackIterator) StartPosition() uint64 {
 // Next returns the next pack object, or nil when done.
 // The caller must call Close() on the returned reader before calling Next again.
 // offsetToOID maps pack file offsets to OID bytes, enabling ofs_delta→ref_delta conversion.
-func (it *PackIterator) Next(repo *Repo, offsetToOID map[uint64][]byte) (*PackObjectReader, error) {
+func (it *PackIterator) Next(store ObjectStore, offsetToOID map[uint64][]byte) (*PackObjectReader, error) {
 	if it.objectIndex >= it.objectCount {
 		return nil, nil
 	}
@@ -1122,7 +1014,7 @@ func (it *PackIterator) Next(repo *Repo, offsetToOID map[uint64][]byte) (*PackOb
 				}
 			}
 		}
-		if err := por.initDeltaAndCache(repo); err != nil {
+		if err := por.initDeltaAndCache(store); err != nil {
 			por.Close()
 			return nil, err
 		}
@@ -1323,9 +1215,9 @@ func (pw *PackWriter) writeObjectHeader() {
 // Pack index search
 // ---------------------------------------------------------------------------
 
-func newPackObjectReaderFromIndex(repo *Repo, oidHex string) (*PackObjectReader, error) {
-	packDir := filepath.Join(repo.repoPath, "objects", "pack")
-	offset, packID, err := searchPackIndexes(repo.opts.Hash, packDir, oidHex, repo.opts.bufferSize())
+func newPackObjectReaderFromIndex(store ObjectStore, repoPath string, hashKind HashKind, bufferSize int, oidHex string) (*PackObjectReader, error) {
+	packDir := filepath.Join(repoPath, "objects", "pack")
+	offset, packID, err := searchPackIndexes(hashKind, packDir, oidHex, bufferSize)
 	if err != nil {
 		return nil, err
 	}
@@ -1333,7 +1225,7 @@ func newPackObjectReaderFromIndex(repo *Repo, oidHex string) (*PackObjectReader,
 	packFileName := fmt.Sprintf("pack-%s.pack", packID)
 	packPath := filepath.Join(packDir, packFileName)
 
-	pr, err := NewFilePackReader(packPath, repo.opts.bufferSize())
+	pr, err := NewFilePackReader(packPath, bufferSize)
 	if err != nil {
 		return nil, err
 	}
@@ -1360,7 +1252,7 @@ func newPackObjectReaderFromIndex(repo *Repo, oidHex string) (*PackObjectReader,
 	if err != nil {
 		return nil, err
 	}
-	if err := por.initDeltaAndCache(repo); err != nil {
+	if err := por.initDeltaAndCache(store); err != nil {
 		por.Close()
 		return nil, err
 	}

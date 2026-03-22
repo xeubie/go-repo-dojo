@@ -124,7 +124,7 @@ func TestCreateAndReadPack(t *testing.T) {
 
 		found := false
 		for {
-			por, err := iter.Next(repo, nil)
+			por, err := iter.Next(repo.store, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -148,7 +148,7 @@ func TestCreateAndReadPack(t *testing.T) {
 					pr2.Close()
 					t.Fatal(err)
 				}
-				msg := findCommitMessage(t, iter2, repo, tc.oid)
+				msg := findCommitMessage(t, iter2, repo.store, opts.Hash, tc.oid)
 				pr2.Close()
 				if msg != tc.message {
 					t.Fatalf("expected message %q, got %q", tc.message, msg)
@@ -174,10 +174,10 @@ func hashPackObject(hashKind HashKind, header ObjectHeader, r io.Reader) string 
 }
 
 // findCommitMessage iterates a pack to find a commit by OID and returns its message.
-func findCommitMessage(t *testing.T, iter *PackIterator, repo *Repo, targetOID string) string {
+func findCommitMessage(t *testing.T, iter *PackIterator, store ObjectStore, hashKind HashKind, targetOID string) string {
 	t.Helper()
 	for {
-		por, err := iter.Next(repo, nil)
+		por, err := iter.Next(store, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -199,7 +199,7 @@ func findCommitMessage(t *testing.T, iter *PackIterator, repo *Repo, targetOID s
 		}
 
 		headerStr := fmt.Sprintf("commit %d\x00", header.Size)
-		hasher := repo.opts.Hash.NewHasher()
+		hasher := hashKind.NewHasher()
 		hasher.Write([]byte(headerStr))
 		hasher.Write(content)
 		computedOID := hex.EncodeToString(hasher.Sum(nil))

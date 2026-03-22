@@ -11,6 +11,7 @@ type RepoOpts struct {
 	Hash       HashKind
 	IsTest     bool
 	BufferSize int
+	Store      ObjectStore // optional; defaults to FileObjectStore
 }
 
 func (o RepoOpts) bufferSize() int {
@@ -24,6 +25,7 @@ type Repo struct {
 	opts     RepoOpts
 	workPath string
 	repoPath string
+	store    ObjectStore
 }
 
 func InitRepo(workPath string, opts RepoOpts) (*Repo, error) {
@@ -56,10 +58,16 @@ func InitRepo(workPath string, opts RepoOpts) (*Repo, error) {
 		}
 	}
 
+	store := opts.Store
+	if store == nil {
+		store = NewFileObjectStore(gitDir, opts)
+	}
+
 	repo := &Repo{
 		opts:     opts,
 		workPath: workPath,
 		repoPath: gitDir,
+		store:    store,
 	}
 
 	// create default branch "master"
@@ -83,7 +91,11 @@ func OpenRepo(workPath string, opts RepoOpts) (*Repo, error) {
 	for {
 		gitDir := filepath.Join(dir, ".git")
 		if _, err := os.Stat(gitDir); err == nil {
-			return &Repo{opts: opts, workPath: dir, repoPath: gitDir}, nil
+			store := opts.Store
+			if store == nil {
+				store = NewFileObjectStore(gitDir, opts)
+			}
+			return &Repo{opts: opts, workPath: dir, repoPath: gitDir, store: store}, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
