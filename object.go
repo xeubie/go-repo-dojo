@@ -236,7 +236,7 @@ type CommitMetadata struct {
 func (repo *Repo) signContent(lines []string, signingKey string) ([]string, error) {
 	content := strings.Join(lines, "\n")
 
-	contentFileName := "xit_signing_buffer"
+	contentFileName := "git_signing_buffer"
 	contentFilePath := filepath.Join(repo.workPath, ".git", contentFileName)
 	if err := os.WriteFile(contentFilePath, []byte(content), 0644); err != nil {
 		return nil, err

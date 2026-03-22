@@ -34,7 +34,6 @@ func runGitOnServer(t *testing.T, server testServer, dir string, args ...string)
 	}
 }
 
-
 // --- HTTP server ---
 
 type httpServer struct {

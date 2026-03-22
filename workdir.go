@@ -590,7 +590,6 @@ func (repo *Repo) untrackedParent(path string, idx *Index) bool {
 	return false
 }
 
-
 // SwitchKind differentiates between switch and reset.
 type SwitchKind int
 
