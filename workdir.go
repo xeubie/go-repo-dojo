@@ -224,7 +224,15 @@ type RemoveOptions struct {
 
 // indexDiffersFromWorkDir checks if the work dir file differs from the index entry.
 func (repo *Repo) indexDiffersFromWorkDir(entry *indexEntry, fullPath string) (bool, error) {
+	info, err := os.Lstat(fullPath)
+	if err != nil {
+		return true, nil
+	}
+
 	if entry.mode.ObjType() == ModeObjectTypeSymlink {
+		if uint32(info.Size()) != entry.fileSize {
+			return true, nil
+		}
 		target, err := os.Readlink(fullPath)
 		if err != nil {
 			return true, nil
@@ -236,10 +244,26 @@ func (repo *Repo) indexDiffersFromWorkDir(entry *indexEntry, fullPath string) (b
 		return !bytes.Equal(entry.oid, oid), nil
 	}
 
-	info, err := os.Lstat(fullPath)
-	if err != nil {
+	// size check — avoids opening the file when size differs
+	if uint32(info.Size()) != entry.fileSize {
 		return true, nil
 	}
+
+	// executable bit check
+	wantExec := entry.mode.UnixPerm() == 0o755
+	isExec := info.Mode().Perm()&0o111 != 0
+	if wantExec != isExec {
+		return true, nil
+	}
+
+	// mtime check — if mtime is unchanged, assume content is unchanged
+	mtimeSecs := uint32(info.ModTime().Unix())
+	mtimeNsecs := uint32(info.ModTime().Nanosecond())
+	if mtimeSecs == entry.mtimeSecs && mtimeNsecs == entry.mtimeNsecs {
+		return false, nil
+	}
+
+	// mtime changed — hash to confirm
 	f, err := os.Open(fullPath)
 	if err != nil {
 		return true, nil
