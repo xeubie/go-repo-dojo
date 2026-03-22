@@ -13,7 +13,7 @@ const maxLineCount = 100000
 var errStreamTooLong = errors.New("stream too long")
 
 // ---------------------------------------------------------------------------
-// LineIterator
+// lineIterator
 // ---------------------------------------------------------------------------
 
 // lineSource is the interface for different line-reading backends.
@@ -33,18 +33,18 @@ type lineSource interface {
 	setBinary()
 }
 
-// LineIterator reads lines from a source, tracking line offsets for seeking.
-type LineIterator struct {
+// lineIterator reads lines from a source, tracking line offsets for seeking.
+type lineIterator struct {
 	source      lineSource
 	lineOffsets []uint64
 	currentLine int
 }
 
-func (it *LineIterator) count() int {
+func (it *lineIterator) count() int {
 	return len(it.lineOffsets)
 }
 
-func (it *LineIterator) next() (string, bool, error) {
+func (it *lineIterator) next() (string, bool, error) {
 	line, ok, err := it.source.readLine()
 	if ok {
 		it.currentLine++
@@ -52,7 +52,7 @@ func (it *LineIterator) next() (string, bool, error) {
 	return line, ok, err
 }
 
-func (it *LineIterator) get(lineNum int) (string, error) {
+func (it *lineIterator) get(lineNum int) (string, error) {
 	it.seekTo(lineNum)
 	line, ok, err := it.next()
 	if err != nil {
@@ -64,7 +64,7 @@ func (it *LineIterator) get(lineNum int) (string, error) {
 	return line, nil
 }
 
-func (it *LineIterator) seekTo(lineNum int) {
+func (it *lineIterator) seekTo(lineNum int) {
 	if lineNum == it.currentLine {
 		return
 	}
@@ -76,17 +76,17 @@ func (it *LineIterator) seekTo(lineNum int) {
 	it.currentLine = lineNum
 }
 
-func (it *LineIterator) reset() {
+func (it *lineIterator) reset() {
 	it.currentLine = 0
 	it.source.resetSource()
 }
 
-func (it *LineIterator) close() {
+func (it *lineIterator) close() {
 	it.source.closeSource()
 }
 
 // validateLines reads each line to populate lineOffsets and detect binary data.
-func (it *LineIterator) validateLines() error {
+func (it *lineIterator) validateLines() error {
 	var offsets []uint64
 	var lastPos uint64
 
@@ -172,8 +172,8 @@ func (s *objectLineSource) closeSource() {
 	}
 }
 
-func (s *objectLineSource) isBinary() bool  { return s.binary }
-func (s *objectLineSource) setBinary()      { s.binary = true }
+func (s *objectLineSource) isBinary() bool { return s.binary }
+func (s *objectLineSource) setBinary()     { s.binary = true }
 
 // ---------------------------------------------------------------------------
 // bufferLineSource — reads lines from an in-memory slice
@@ -193,13 +193,13 @@ func (s *bufferLineSource) readLine() (string, bool, error) {
 	return line, true, nil
 }
 
-func (s *bufferLineSource) resetSource()                       { s.currentLine = 0 }
-func (s *bufferLineSource) seekToLine(lineNum int, _ uint64)   { s.currentLine = lineNum }
-func (s *bufferLineSource) closeSource()           {}
-func (s *bufferLineSource) isBinary() bool         { return false }
-func (s *bufferLineSource) setBinary()             {}
+func (s *bufferLineSource) resetSource()                     { s.currentLine = 0 }
+func (s *bufferLineSource) seekToLine(lineNum int, _ uint64) { s.currentLine = lineNum }
+func (s *bufferLineSource) closeSource()                     {}
+func (s *bufferLineSource) isBinary() bool                   { return false }
+func (s *bufferLineSource) setBinary()                       {}
 
-// override seekTo for buffer: just set currentLine (handled by LineIterator.seekTo)
+// override seekTo for buffer: just set currentLine (handled by lineIterator.seekTo)
 // override next for buffer: use currentLine from the bufferLineSource
 
 // ---------------------------------------------------------------------------
@@ -208,19 +208,19 @@ func (s *bufferLineSource) setBinary()             {}
 
 type nothingLineSource struct{}
 
-func (s *nothingLineSource) readLine() (string, bool, error) { return "", false, nil }
-func (s *nothingLineSource) resetSource()                    {}
+func (s *nothingLineSource) readLine() (string, bool, error)       { return "", false, nil }
+func (s *nothingLineSource) resetSource()                          {}
 func (s *nothingLineSource) seekToLine(lineNum int, offset uint64) {}
-func (s *nothingLineSource) closeSource()                    {}
-func (s *nothingLineSource) isBinary() bool                  { return false }
-func (s *nothingLineSource) setBinary()                      {}
+func (s *nothingLineSource) closeSource()                          {}
+func (s *nothingLineSource) isBinary() bool                        { return false }
+func (s *nothingLineSource) setBinary()                            {}
 
 // ---------------------------------------------------------------------------
 // Constructors
 // ---------------------------------------------------------------------------
 
-func newLineIteratorFromObject(reader ObjectReader) (*LineIterator, error) {
-	it := &LineIterator{
+func newLineIteratorFromObject(reader ObjectReader) (*lineIterator, error) {
+	it := &lineIterator{
 		source: &objectLineSource{reader: reader},
 	}
 	if err := it.validateLines(); err != nil {
@@ -230,7 +230,7 @@ func newLineIteratorFromObject(reader ObjectReader) (*LineIterator, error) {
 	return it, nil
 }
 
-func newLineIteratorFromBuffer(text string) *LineIterator {
+func newLineIteratorFromBuffer(text string) *lineIterator {
 	var lines []string
 	if text != "" {
 		lines = strings.Split(text, "\n")
@@ -242,20 +242,20 @@ func newLineIteratorFromBuffer(text string) *LineIterator {
 		pos += uint64(len(line)) + 1
 	}
 	src := &bufferLineSource{lines: lines}
-	return &LineIterator{
+	return &lineIterator{
 		source:      src,
 		lineOffsets: offsets,
 	}
 }
 
-func newLineIteratorFromNothing() *LineIterator {
-	return &LineIterator{
+func newLineIteratorFromNothing() *lineIterator {
+	return &lineIterator{
 		source: &nothingLineSource{},
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Edit
+// edit
 // ---------------------------------------------------------------------------
 
 type editKind int
@@ -266,14 +266,14 @@ const (
 	editDel
 )
 
-type Edit struct {
+type edit struct {
 	kind       editKind
 	oldLineNum int
 	newLineNum int
 }
 
 // ---------------------------------------------------------------------------
-// MyersDiffIterator
+// myersDiffIterator
 // ---------------------------------------------------------------------------
 
 type myersDiffAction int
@@ -290,24 +290,24 @@ type myersDiffRange struct {
 	insEnd   int
 }
 
-type MyersDiffIterator struct {
-	lineIterA *LineIterator
-	lineIterB *LineIterator
-	cache     []Edit
-	stack     []int
-	action    *myersDiffAction
-	b         []int
-	i, j      int
-	n, m      int
-	z         int
+type myersDiffIterator struct {
+	lineIterA     *lineIterator
+	lineIterB     *lineIterator
+	cache         []edit
+	stack         []int
+	action        *myersDiffAction
+	b             []int
+	i, j          int
+	n, m          int
+	z             int
 	rangeMaybe    *myersDiffRange
 	deferredRange myersDiffRange
-	nextIndex int
-	xIndex    int
-	yIndex    int
+	nextIndex     int
+	xIndex        int
+	yIndex        int
 }
 
-func newMyersDiffIterator(lineIterA, lineIterB *LineIterator) *MyersDiffIterator {
+func newMyersDiffIterator(lineIterA, lineIterB *lineIterator) *myersDiffIterator {
 	n := lineIterA.count()
 	m := lineIterB.count()
 	z := (min(n, m) + 1) * 2
@@ -315,7 +315,7 @@ func newMyersDiffIterator(lineIterA, lineIterB *LineIterator) *MyersDiffIterator
 	b := make([]int, 2*z)
 	action := myersDiffPush
 
-	return &MyersDiffIterator{
+	return &myersDiffIterator{
 		lineIterA: lineIterA,
 		lineIterB: lineIterB,
 		b:         b,
@@ -328,7 +328,7 @@ func newMyersDiffIterator(lineIterA, lineIterB *LineIterator) *MyersDiffIterator
 	}
 }
 
-func (d *MyersDiffIterator) eq(i, j int) (bool, error) {
+func (d *myersDiffIterator) eq(i, j int) (bool, error) {
 	lineA, err := d.lineIterA.get(i)
 	if err != nil {
 		return false, err
@@ -348,7 +348,7 @@ func floorDiv(a, b int) int {
 	return q
 }
 
-func (d *MyersDiffIterator) diff(action myersDiffAction) (*myersDiffAction, error) {
+func (d *myersDiffIterator) diff(action myersDiffAction) (*myersDiffAction, error) {
 	i := d.i
 	j := d.j
 	n := d.n
@@ -536,7 +536,7 @@ func (d *MyersDiffIterator) diff(action myersDiffAction) (*myersDiffAction, erro
 	}
 }
 
-func (d *MyersDiffIterator) next() (*Edit, error) {
+func (d *myersDiffIterator) next() (*edit, error) {
 	if d.nextIndex >= len(d.cache) {
 		if d.action == nil {
 			return nil, nil
@@ -558,21 +558,21 @@ func (d *MyersDiffIterator) next() (*Edit, error) {
 
 		// equal lines before the range
 		for oi, ni := d.xIndex, d.yIndex; oi < r.delStart && ni < r.insStart; oi, ni = oi+1, ni+1 {
-			d.cache = append(d.cache, Edit{kind: editEql, oldLineNum: oi, newLineNum: ni})
+			d.cache = append(d.cache, edit{kind: editEql, oldLineNum: oi, newLineNum: ni})
 		}
 		// deletions
 		for oi := r.delStart; oi < r.delEnd; oi++ {
-			d.cache = append(d.cache, Edit{kind: editDel, oldLineNum: oi})
+			d.cache = append(d.cache, edit{kind: editDel, oldLineNum: oi})
 		}
 		// insertions
 		for ni := r.insStart; ni < r.insEnd; ni++ {
-			d.cache = append(d.cache, Edit{kind: editIns, newLineNum: ni})
+			d.cache = append(d.cache, edit{kind: editIns, newLineNum: ni})
 		}
 
 		if actionResult == nil {
 			// trailing equal lines
 			for oi, ni := r.delEnd, r.insEnd; oi < d.lineIterA.count() && ni < d.lineIterB.count(); oi, ni = oi+1, ni+1 {
-				d.cache = append(d.cache, Edit{kind: editEql, oldLineNum: oi, newLineNum: ni})
+				d.cache = append(d.cache, edit{kind: editEql, oldLineNum: oi, newLineNum: ni})
 			}
 		}
 
@@ -588,7 +588,7 @@ func (d *MyersDiffIterator) next() (*Edit, error) {
 	return &edit, nil
 }
 
-func (d *MyersDiffIterator) get(oldLine int) (*int, error) {
+func (d *myersDiffIterator) get(oldLine int) (*int, error) {
 	// consume all edits
 	for {
 		e, err := d.next()
@@ -614,7 +614,7 @@ func (d *MyersDiffIterator) get(oldLine int) (*int, error) {
 	return nil, nil
 }
 
-func (d *MyersDiffIterator) contains(oldLine int) (bool, error) {
+func (d *myersDiffIterator) contains(oldLine int) (bool, error) {
 	result, err := d.get(oldLine)
 	if err != nil {
 		return false, err
@@ -622,51 +622,51 @@ func (d *MyersDiffIterator) contains(oldLine int) (bool, error) {
 	return result != nil, nil
 }
 
-func (d *MyersDiffIterator) reset() {
+func (d *myersDiffIterator) reset() {
 	d.lineIterA.reset()
 	d.lineIterB.reset()
 	d.nextIndex = 0
 }
 
 // ---------------------------------------------------------------------------
-// Diff3Iterator
+// diff3Iterator
 // ---------------------------------------------------------------------------
 
-type Diff3Range struct {
+type diff3Range struct {
 	Begin int
 	End   int
 }
 
-type Diff3ChunkKind int
+type diff3ChunkKind int
 
 const (
-	Diff3Clean    Diff3ChunkKind = iota
-	Diff3Conflict
+	diff3Clean diff3ChunkKind = iota
+	diff3Conflict
 )
 
-type Diff3Chunk struct {
-	Kind   Diff3ChunkKind
-	ORange *Diff3Range
-	ARange *Diff3Range
-	BRange *Diff3Range
+type diff3Chunk struct {
+	Kind   diff3ChunkKind
+	ORange *diff3Range
+	ARange *diff3Range
+	BRange *diff3Range
 }
 
-type Diff3Iterator struct {
-	lineCountO int
-	lineCountA int
-	lineCountB int
-	lineO      int
-	lineA      int
-	lineB      int
-	myersDiffIterA *MyersDiffIterator
-	myersDiffIterB *MyersDiffIterator
-	Finished   bool
+type diff3Iterator struct {
+	lineCountO     int
+	lineCountA     int
+	lineCountB     int
+	lineO          int
+	lineA          int
+	lineB          int
+	myersDiffIterA *myersDiffIterator
+	myersDiffIterB *myersDiffIterator
+	finished       bool
 }
 
-func newDiff3Iterator(lineIterO, lineIterA, lineIterB *LineIterator) *Diff3Iterator {
+func newDiff3Iterator(lineIterO, lineIterA, lineIterB *lineIterator) *diff3Iterator {
 	myersDiffIterA := newMyersDiffIterator(lineIterO, lineIterA)
 	myersDiffIterB := newMyersDiffIterator(lineIterO, lineIterB)
-	return &Diff3Iterator{
+	return &diff3Iterator{
 		lineCountO:     lineIterO.count(),
 		lineCountA:     lineIterA.count(),
 		lineCountB:     lineIterB.count(),
@@ -675,8 +675,8 @@ func newDiff3Iterator(lineIterO, lineIterA, lineIterB *LineIterator) *Diff3Itera
 	}
 }
 
-func (d *Diff3Iterator) next() (*Diff3Chunk, error) {
-	if d.Finished {
+func (d *diff3Iterator) next() (*diff3Chunk, error) {
+	if d.finished {
 		return nil, nil
 	}
 
@@ -732,10 +732,10 @@ func (d *Diff3Iterator) next() (*Diff3Chunk, error) {
 					d.lineO = o
 					d.lineA = *a
 					d.lineB = *b
-					return diff3Chunk(
-						diff3Range(lineO, d.lineO),
-						diff3Range(lineA, d.lineA),
-						diff3Range(lineB, d.lineB),
+					return newDiff3Chunk(
+						newDiff3Range(lineO, d.lineO),
+						newDiff3Range(lineA, d.lineA),
+						newDiff3Range(lineB, d.lineB),
 						false,
 					), nil
 				}
@@ -747,41 +747,41 @@ func (d *Diff3Iterator) next() (*Diff3Chunk, error) {
 			d.lineO += i
 			d.lineA += i
 			d.lineB += i
-			return diff3Chunk(
-				diff3Range(lineO, d.lineO),
-				diff3Range(lineA, d.lineA),
-				diff3Range(lineB, d.lineB),
+			return newDiff3Chunk(
+				newDiff3Range(lineO, d.lineO),
+				newDiff3Range(lineA, d.lineA),
+				newDiff3Range(lineB, d.lineB),
 				true,
 			), nil
 		}
 	}
 
 	// return final chunk
-	d.Finished = true
-	return diff3Chunk(
-		diff3Range(d.lineO, d.lineCountO),
-		diff3Range(d.lineA, d.lineCountA),
-		diff3Range(d.lineB, d.lineCountB),
+	d.finished = true
+	return newDiff3Chunk(
+		newDiff3Range(d.lineO, d.lineCountO),
+		newDiff3Range(d.lineA, d.lineCountA),
+		newDiff3Range(d.lineB, d.lineCountB),
 		i > 0,
 	), nil
 }
 
-func (d *Diff3Iterator) reset() {
+func (d *diff3Iterator) reset() {
 	d.lineO = 0
 	d.lineA = 0
 	d.lineB = 0
 	d.myersDiffIterA.reset()
 	d.myersDiffIterB.reset()
-	d.Finished = false
+	d.finished = false
 }
 
-func (d *Diff3Iterator) inBounds(i int) bool {
+func (d *diff3Iterator) inBounds(i int) bool {
 	return d.lineO+i < d.lineCountO ||
 		d.lineA+i < d.lineCountA ||
 		d.lineB+i < d.lineCountB
 }
 
-func (d *Diff3Iterator) isMatch(myersDiffIter *MyersDiffIterator, offset, i int) (bool, error) {
+func (d *diff3Iterator) isMatch(myersDiffIter *myersDiffIterator, offset, i int) (bool, error) {
 	result, err := myersDiffIter.get(d.lineO + i)
 	if err != nil {
 		return false, err
@@ -792,22 +792,22 @@ func (d *Diff3Iterator) isMatch(myersDiffIter *MyersDiffIterator, offset, i int)
 	return false, nil
 }
 
-func diff3Range(begin, end int) *Diff3Range {
+func newDiff3Range(begin, end int) *diff3Range {
 	if end > begin {
-		return &Diff3Range{Begin: begin, End: end}
+		return &diff3Range{Begin: begin, End: end}
 	}
 	return nil
 }
 
-func diff3Chunk(oRange, aRange, bRange *Diff3Range, match bool) *Diff3Chunk {
+func newDiff3Chunk(oRange, aRange, bRange *diff3Range, match bool) *diff3Chunk {
 	if match {
 		if oRange == nil {
 			return nil
 		}
-		return &Diff3Chunk{Kind: Diff3Clean, ORange: oRange}
+		return &diff3Chunk{Kind: diff3Clean, ORange: oRange}
 	}
-	return &Diff3Chunk{
-		Kind:   Diff3Conflict,
+	return &diff3Chunk{
+		Kind:   diff3Conflict,
 		ORange: oRange,
 		ARange: aRange,
 		BRange: bRange,

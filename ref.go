@@ -13,7 +13,7 @@ var (
 
 const refStartStr = "ref: "
 
-func ValidateRefName(name string) bool {
+func validateRefName(name string) bool {
 	if len(name) == 0 || len(name) > 255 {
 		return false
 	}
@@ -69,7 +69,7 @@ func (r Ref) ToPath() string {
 	return r.Name
 }
 
-func RefFromPath(refPath string, defaultKind *RefKind) *Ref {
+func refFromPath(refPath string, defaultKind *RefKind) *Ref {
 	parts := strings.Split(refPath, "/")
 
 	if parts[0] != "refs" {
@@ -117,9 +117,9 @@ type RefOrOid struct {
 	OID   string // hex string
 }
 
-func RefOrOidFromDb(content string) *RefOrOid {
+func refOrOidFromDb(content string) *RefOrOid {
 	if strings.HasPrefix(content, refStartStr) {
-		ref := RefFromPath(content[len(refStartStr):], nil)
+		ref := refFromPath(content[len(refStartStr):], nil)
 		if ref == nil {
 			return nil
 		}
@@ -233,7 +233,7 @@ func (repo *Repo) readRef(refPath string) (*RefOrOid, error) {
 	data, err := os.ReadFile(filePath)
 	if err == nil {
 		content := strings.TrimRight(string(data), "\n\r")
-		result := RefOrOidFromDb(content)
+		result := refOrOidFromDb(content)
 		return result, nil
 	}
 	if !os.IsNotExist(err) {
@@ -282,8 +282,7 @@ func (repo *Repo) readRefRecur(input RefOrOid) (string, error) {
 	return repo.readRefRecur(*result)
 }
 
-// ReadHeadRecurMaybe reads HEAD and recursively resolves it.
-// Returns "" if HEAD doesn't resolve to an OID.
+// Resolves HEAD recursively to an OID hex string, returning "" if unresolvable.
 func (repo *Repo) ReadHeadRecurMaybe() (string, error) {
 	result, err := repo.readRef("HEAD")
 	if err != nil {
@@ -298,8 +297,7 @@ func (repo *Repo) ReadHeadRecurMaybe() (string, error) {
 	return repo.readRefRecur(*result)
 }
 
-// ReadHeadRecur reads HEAD and recursively resolves it.
-// Returns error if HEAD doesn't resolve to an OID.
+// Resolves HEAD recursively to an OID hex string, returning an error if unresolvable.
 func (repo *Repo) ReadHeadRecur() (string, error) {
 	oid, err := repo.ReadHeadRecurMaybe()
 	if err != nil {
@@ -311,7 +309,7 @@ func (repo *Repo) ReadHeadRecur() (string, error) {
 	return oid, nil
 }
 
-// ReadRef reads a ref by kind+name and recursively resolves it.
+// Recursively resolves a ref to its OID hex string.
 func (repo *Repo) ReadRef(ref Ref) (string, error) {
 	refPath := ref.ToPath()
 	result, err := repo.readRef(refPath)
@@ -339,7 +337,7 @@ func (repo *Repo) writeRef(refPath string, refOrOid RefOrOid) error {
 		content = refOrOid.OID
 	}
 
-	lock, err := NewLockFile(repo.repoPath, refPath)
+	lock, err := newLockFile(repo.repoPath, refPath)
 	if err != nil {
 		return err
 	}

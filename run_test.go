@@ -1702,7 +1702,7 @@ func TestRun(t *testing.T) {
 	}
 }
 
-func countIndexEntries(idx *Index) int {
+func countIndexEntries(idx *index) int {
 	count := 0
 	for _, entries := range idx.entries {
 		for _, e := range entries {

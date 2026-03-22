@@ -40,8 +40,8 @@ type httpConfig struct {
 	receivepack bool
 }
 
-// ResolveHTTPBackendDir strips the route suffix from path and returns the repo directory.
-func ResolveHTTPBackendDir(path string) (string, error) {
+// resolveHTTPBackendDir strips the route suffix from path and returns the repo directory.
+func resolveHTTPBackendDir(path string) (string, error) {
 	for _, route := range httpRoutes {
 		if strings.HasSuffix(path, route.suffix) {
 			return path[:len(path)-len(route.suffix)], nil
@@ -50,8 +50,8 @@ func ResolveHTTPBackendDir(path string) (string, error) {
 	return "", fmt.Errorf("not found")
 }
 
-// MatchHTTPRoute finds the handler and suffix for a given path.
-func MatchHTTPRoute(path string) (HandlerKind, string, bool) {
+// matchHTTPRoute finds the handler and suffix for a given path.
+func matchHTTPRoute(path string) (HandlerKind, string, bool) {
 	for _, route := range httpRoutes {
 		if strings.HasSuffix(path, route.suffix) {
 			return route.handler, route.suffix, true
@@ -60,6 +60,7 @@ func MatchHTTPRoute(path string) (HandlerKind, string, bool) {
 	return 0, "", false
 }
 
+// Handles a CGI-style smart HTTP git request.
 func (repo *Repo) HTTPBackend(r io.Reader, w io.Writer, options HTTPBackendOptions) error {
 	// method validation
 	for _, route := range httpRoutes {
@@ -140,7 +141,7 @@ func finishHeaders(w io.Writer) {
 	fmt.Fprintf(w, "\r\n")
 }
 
-func SendNotFound(w io.Writer) {
+func sendNotFound(w io.Writer) {
 	httpStatus(w, 404, "Not Found")
 	writeNocacheHeaders(w)
 	finishHeaders(w)

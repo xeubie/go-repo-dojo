@@ -29,26 +29,26 @@ var (
 )
 
 func Run(opts RepoOpts, args []string, cwdPath string, runOpts RunOpts) error {
-	cmdArgs := ParseCommandArgs(args)
-	dispatch := NewDispatch(cmdArgs)
+	cmdArgs := parseCommandArgs(args)
+	dispatch := newDispatch(cmdArgs)
 
 	switch dispatch.Kind {
-	case DispatchInvalidCommand:
+	case dispatchInvalidCommand:
 		fmt.Fprintf(runOpts.Err, "\"%s\" is not a valid command\n\n", dispatch.InvalidName)
-		PrintHelp(nil, runOpts.Err)
+		printHelp(nil, runOpts.Err)
 		return ErrHandled
 
-	case DispatchInvalidArgument:
+	case dispatchInvalidArgument:
 		fmt.Fprintf(runOpts.Err, "\"%s\" is not a valid argument\n\n", dispatch.InvalidName)
-		PrintHelp(dispatch.InvalidCmd, runOpts.Err)
+		printHelp(dispatch.InvalidCmd, runOpts.Err)
 		return ErrHandled
 
-	case DispatchHelp:
-		PrintHelp(dispatch.HelpCmd, runOpts.Out)
+	case dispatchHelp:
+		printHelp(dispatch.HelpCmd, runOpts.Out)
 		return nil
 
-	case DispatchCLI:
-		return runCommand(opts, dispatch.Command, cwdPath, runOpts)
+	case dispatchCLI:
+		return runCommand(opts, dispatch.command, cwdPath, runOpts)
 	}
 	return nil
 }
@@ -68,7 +68,7 @@ func RunPrint(opts RepoOpts, args []string, cwdPath string, runOpts RunOpts) err
 		fmt.Fprintf(runOpts.Err,
 			"repo not found, dummy.\n"+
 				"either you're in the wrong place or you need to make a new one like this:\n\n")
-		PrintHelp(&[]CommandKind{CommandInit}[0], runOpts.Err)
+		printHelp(&[]commandKind{commandInit}[0], runOpts.Err)
 	case ErrAddIndexPathNotFound:
 		fmt.Fprintf(runOpts.Err, "a path you are adding does not exist\n")
 	case ErrRemoveIndexPathNotFound:
@@ -91,9 +91,9 @@ func RunPrint(opts RepoOpts, args []string, cwdPath string, runOpts RunOpts) err
 	return ErrHandled
 }
 
-func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) error {
+func runCommand(opts RepoOpts, cmd *command, cwdPath string, runOpts RunOpts) error {
 	switch cmd.Kind {
-	case CommandInit:
+	case commandInit:
 		workPath, err := filepath.Abs(filepath.Join(cwdPath, cmd.Init.Dir))
 		if err != nil {
 			return err
@@ -110,35 +110,35 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 				"    repomofo config add user.email foo@bar\n")
 		return nil
 
-	case CommandAdd:
+	case commandAdd:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
 		}
 		return repo.Add(cmd.Add.Paths)
 
-	case CommandUnadd:
+	case commandUnadd:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
 		}
 		return repo.Unadd(cmd.Unadd.Paths, cmd.Unadd.Opts)
 
-	case CommandUntrack:
+	case commandUntrack:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
 		}
 		return repo.Untrack(cmd.Untrack.Paths, cmd.Untrack.Force, cmd.Untrack.Recursive)
 
-	case CommandRm:
+	case commandRm:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
 		}
 		return repo.Remove(cmd.Rm.Paths, cmd.Rm.Opts)
 
-	case CommandCommit:
+	case commandCommit:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
@@ -149,14 +149,14 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 		})
 		return err
 
-	case CommandTag:
+	case commandTag:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
 		}
 
 		switch cmd.Tag.SubKind {
-		case TagList:
+		case tagList:
 			iter, err := repo.ListTags()
 			if err != nil {
 				return err
@@ -173,17 +173,17 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 				fmt.Fprintf(runOpts.Out, "%s\n", ref.Name)
 			}
 			return nil
-		case TagAdd:
+		case tagAdd:
 			_, err := repo.AddTag(AddTagInput{
 				Name:    cmd.Tag.Name,
 				Message: cmd.Tag.Message,
 			})
 			return err
-		case TagRemove:
+		case tagRemove:
 			return repo.RemoveTag(RemoveTagInput{Name: cmd.Tag.Name})
 		}
 
-	case CommandStatus:
+	case commandStatus:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
@@ -223,14 +223,14 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 		}
 		return nil
 
-	case CommandBranch:
+	case commandBranch:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
 		}
 
 		switch cmd.Branch.SubKind {
-		case BranchList:
+		case branchList:
 			head, err := repo.Head()
 			if err != nil {
 				return err
@@ -260,18 +260,18 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 				fmt.Fprintf(runOpts.Out, "%s %s\n", prefix, ref.Name)
 			}
 			return nil
-		case BranchAdd:
+		case branchAdd:
 			return repo.AddBranch(AddBranchInput{Name: cmd.Branch.Name})
-		case BranchRemove:
+		case branchRemove:
 			return repo.RemoveBranch(RemoveBranchInput{Name: cmd.Branch.Name})
 		}
 
-	case CommandSwitchDir, CommandReset, CommandResetDir:
+	case commandSwitchDir, commandReset, commandResetDir:
 		kind := SwitchKindSwitch
-		if cmd.Kind != CommandSwitchDir {
+		if cmd.Kind != commandSwitchDir {
 			kind = SwitchKindReset
 		}
-		updateWorkDir := cmd.Kind != CommandReset
+		updateWorkDir := cmd.Kind != commandReset
 
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
@@ -306,21 +306,21 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 		}
 		return nil
 
-	case CommandResetAdd:
+	case commandResetAdd:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
 		}
 		return repo.ResetAdd(cmd.ResetAdd.Target)
 
-	case CommandRestore:
+	case commandRestore:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
 		}
 		return repo.Restore(cmd.Restore.Path)
 
-	case CommandLog:
+	case commandLog:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
@@ -375,14 +375,14 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 		}
 		return nil
 
-	case CommandConfig:
+	case commandConfig:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
 		}
 
 		switch cmd.Config.SubKind {
-		case ConfigList:
+		case configList:
 			config, err := repo.ListConfig()
 			if err != nil {
 				return err
@@ -394,24 +394,24 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 				}
 			}
 			return nil
-		case ConfigAdd:
+		case configAdd:
 			return repo.AddConfig(AddConfigInput{
 				Name:  cmd.Config.Name,
 				Value: cmd.Config.Value,
 			})
-		case ConfigRemove:
+		case configRemove:
 			return repo.RemoveConfig(RemoveConfigInput{
 				Name: cmd.Config.Name,
 			})
 		}
-	case CommandRemote:
+	case commandRemote:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
 		}
 
 		switch cmd.Remote.SubKind {
-		case ConfigList:
+		case configList:
 			remotes, err := repo.ListRemotes()
 			if err != nil {
 				return err
@@ -423,12 +423,12 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 				}
 			}
 			return nil
-		case ConfigAdd:
+		case configAdd:
 			return repo.AddRemote(cmd.Remote.Name, cmd.Remote.Value)
-		case ConfigRemove:
+		case configRemove:
 			return repo.RemoveRemote(cmd.Remote.Name)
 		}
-	case CommandMerge, CommandCherryPick:
+	case commandMerge, commandCherryPick:
 		repo, err := OpenRepo(cwdPath, opts)
 		if err != nil {
 			return ErrRepoNotFound
@@ -470,7 +470,7 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 		}
 		return nil
 
-	case CommandReceivePack:
+	case commandReceivePack:
 		dir, err := filepath.Abs(cmd.ReceivePack.Dir)
 		if err != nil {
 			return err
@@ -482,7 +482,7 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 		options := cmd.ReceivePack.Options
 		options.ProtocolVersion = detectProtocolVersion()
 		return repo.ReceivePack(os.Stdin, os.Stdout, options)
-	case CommandUploadPack:
+	case commandUploadPack:
 		dir, err := filepath.Abs(cmd.UploadPack.Dir)
 		if err != nil {
 			return err
@@ -494,45 +494,45 @@ func runCommand(opts RepoOpts, cmd *Command, cwdPath string, runOpts RunOpts) er
 		options := cmd.UploadPack.Options
 		options.ProtocolVersion = detectProtocolVersion()
 		return repo.UploadPack(os.Stdin, os.Stdout, options)
-	case CommandHTTPBackend:
+	case commandHTTPBackend:
 		path := os.Getenv("PATH_TRANSLATED")
 		if root := os.Getenv("GIT_PROJECT_ROOT"); root != "" {
 			pathInfo := os.Getenv("PATH_INFO")
 			if pathInfo == "" {
-				SendNotFound(os.Stdout)
+				sendNotFound(os.Stdout)
 				return nil
 			}
 			if strings.Contains(pathInfo, "..") {
-				SendNotFound(os.Stdout)
+				sendNotFound(os.Stdout)
 				return nil
 			}
 			path = root + pathInfo
 		} else if strings.Contains(path, "..") {
-			SendNotFound(os.Stdout)
+			sendNotFound(os.Stdout)
 			return nil
 		}
 
-		handler, suffix, ok := MatchHTTPRoute(path)
+		handler, suffix, ok := matchHTTPRoute(path)
 		if !ok {
-			SendNotFound(os.Stdout)
+			sendNotFound(os.Stdout)
 			return nil
 		}
 
-		dir, err := ResolveHTTPBackendDir(path)
+		dir, err := resolveHTTPBackendDir(path)
 		if err != nil {
-			SendNotFound(os.Stdout)
+			sendNotFound(os.Stdout)
 			return nil
 		}
 
 		dir, err = filepath.Abs(dir)
 		if err != nil {
-			SendNotFound(os.Stdout)
+			sendNotFound(os.Stdout)
 			return nil
 		}
 
 		repo, err := OpenRepo(dir, opts)
 		if err != nil {
-			SendNotFound(os.Stdout)
+			sendNotFound(os.Stdout)
 			return nil
 		}
 

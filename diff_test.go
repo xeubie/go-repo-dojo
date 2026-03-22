@@ -10,7 +10,7 @@ func TestMyersDiff(t *testing.T) {
 		lines2 := "C\nB\nA\nB\nA\nC"
 		lineIter1 := newLineIteratorFromBuffer(lines1)
 		lineIter2 := newLineIteratorFromBuffer(lines2)
-		expectedDiff := []Edit{
+		expectedDiff := []edit{
 			{kind: editDel, oldLineNum: 0},
 			{kind: editIns, newLineNum: 0},
 			{kind: editEql, oldLineNum: 1, newLineNum: 1},
@@ -22,7 +22,7 @@ func TestMyersDiff(t *testing.T) {
 			{kind: editIns, newLineNum: 5},
 		}
 		myersDiffIter := newMyersDiffIterator(lineIter1, lineIter2)
-		var actualDiff []Edit
+		var actualDiff []edit
 		for {
 			edit, err := myersDiffIter.next()
 			if err != nil {
@@ -48,12 +48,12 @@ func TestMyersDiff(t *testing.T) {
 		lines2 := "goodbye, world!"
 		lineIter1 := newLineIteratorFromBuffer(lines1)
 		lineIter2 := newLineIteratorFromBuffer(lines2)
-		expectedDiff := []Edit{
+		expectedDiff := []edit{
 			{kind: editDel, oldLineNum: 0},
 			{kind: editIns, newLineNum: 0},
 		}
 		myersDiffIter := newMyersDiffIterator(lineIter1, lineIter2)
-		var actualDiff []Edit
+		var actualDiff []edit
 		for {
 			edit, err := myersDiffIter.next()
 			if err != nil {
@@ -90,7 +90,7 @@ func TestDiff3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if chunk == nil || chunk.Kind != Diff3Clean {
+	if chunk == nil || chunk.Kind != diff3Clean {
 		t.Fatalf("expected clean chunk, got %+v", chunk)
 	}
 
@@ -98,7 +98,7 @@ func TestDiff3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if chunk == nil || chunk.Kind != Diff3Conflict {
+	if chunk == nil || chunk.Kind != diff3Conflict {
 		t.Fatalf("expected conflict chunk, got %+v", chunk)
 	}
 
@@ -106,7 +106,7 @@ func TestDiff3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if chunk == nil || chunk.Kind != Diff3Clean {
+	if chunk == nil || chunk.Kind != diff3Clean {
 		t.Fatalf("expected clean chunk, got %+v", chunk)
 	}
 
@@ -114,7 +114,7 @@ func TestDiff3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if chunk == nil || chunk.Kind != Diff3Conflict {
+	if chunk == nil || chunk.Kind != diff3Conflict {
 		t.Fatalf("expected conflict chunk, got %+v", chunk)
 	}
 
@@ -122,7 +122,7 @@ func TestDiff3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if chunk == nil || chunk.Kind != Diff3Clean {
+	if chunk == nil || chunk.Kind != diff3Clean {
 		t.Fatalf("expected clean chunk, got %+v", chunk)
 	}
 
@@ -135,7 +135,7 @@ func TestDiff3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if chunk == nil || chunk.Kind != Diff3Conflict {
+	if chunk == nil || chunk.Kind != diff3Conflict {
 		t.Fatalf("expected conflict chunk, got %+v", chunk)
 	}
 

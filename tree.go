@@ -187,7 +187,7 @@ func (repo *Repo) pathToTreeEntry(pathParts []string) (string, Mode, error) {
 // headTreeEntry returns the OID and mode of a path in the HEAD tree.
 // Returns nil OID if not found.
 func (repo *Repo) headTreeEntry(filePath string) ([]byte, Mode) {
-	parts := SplitPath(filePath)
+	parts := splitPath(filePath)
 	oidHex, mode, err := repo.pathToTreeEntry(parts)
 	if err != nil {
 		return nil, 0

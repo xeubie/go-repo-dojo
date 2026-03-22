@@ -23,11 +23,11 @@ func addFile(t *testing.T, repo *Repo, path, content string) {
 }
 
 func TestSimple(t *testing.T) {
-	t.Run("FileObjectStore", func(t *testing.T) {
+	t.Run("fileObjectStore", func(t *testing.T) {
 		Simple(t, nil)
 	})
-	t.Run("MemoryObjectStore", func(t *testing.T) {
-		Simple(t, NewMemoryObjectStore(SHA1Hash))
+	t.Run("memoryObjectStore", func(t *testing.T) {
+		Simple(t, newMemoryObjectStore(SHA1Hash))
 	})
 }
 
@@ -1575,4 +1575,3 @@ func TestLog(t *testing.T) {
 		}
 	}
 }
-

@@ -100,12 +100,12 @@ func (pr *FilePackReader) IsFile() bool { return true }
 
 // StreamPackReader reads pack data from a sequential stream.
 type StreamPackReader struct {
-	counting *CountingReader
+	counting *countingReader
 }
 
 func NewStreamPackReader(r io.Reader, bufSize int) *StreamPackReader {
 	br := bufio.NewReaderSize(r, bufSize)
-	return &StreamPackReader{counting: NewCountingReader(br)}
+	return &StreamPackReader{counting: newCountingReader(br)}
 }
 
 func (pr *StreamPackReader) Close() {}
@@ -136,28 +136,28 @@ func (pr *StreamPackReader) Dupe() (PackReader, error) {
 func (pr *StreamPackReader) IsFile() bool { return false }
 
 // ---------------------------------------------------------------------------
-// CountingReader
+// countingReader
 // ---------------------------------------------------------------------------
 
-// CountingReader wraps a *bufio.Reader and tracks the number of logical bytes
+// countingReader wraps a *bufio.Reader and tracks the number of logical bytes
 // consumed. It implements io.ByteReader so that compress/flate will not wrap
 // it in an extra bufio.Reader.
-type CountingReader struct {
+type countingReader struct {
 	br  *bufio.Reader
 	pos uint64
 }
 
-func NewCountingReader(br *bufio.Reader) *CountingReader {
-	return &CountingReader{br: br}
+func newCountingReader(br *bufio.Reader) *countingReader {
+	return &countingReader{br: br}
 }
 
-func (cr *CountingReader) Read(p []byte) (int, error) {
+func (cr *countingReader) Read(p []byte) (int, error) {
 	n, err := cr.br.Read(p)
 	cr.pos += uint64(n)
 	return n, err
 }
 
-func (cr *CountingReader) ReadByte() (byte, error) {
+func (cr *countingReader) ReadByte() (byte, error) {
 	b, err := cr.br.ReadByte()
 	if err != nil {
 		return 0, err
@@ -166,7 +166,7 @@ func (cr *CountingReader) ReadByte() (byte, error) {
 	return b, nil
 }
 
-func (cr *CountingReader) LogicalPos() uint64 {
+func (cr *countingReader) LogicalPos() uint64 {
 	return cr.pos
 }
 
@@ -1051,6 +1051,7 @@ type PackWriter struct {
 	bufferSize int
 }
 
+// Creates a pack-format writer that streams all objects from the given iterator.
 func (repo *Repo) NewPackWriter(iter *ObjectIterator) (*PackWriter, error) {
 	hashKind := repo.opts.Hash
 	var objects []packWriterObj
@@ -1446,7 +1447,7 @@ func parseObjectHeaderFromReader(r io.Reader) (ObjectHeader, error) {
 		}
 		typeBuf.WriteByte(b[0])
 	}
-	kind, err := ObjectKindFromName(typeBuf.String())
+	kind, err := objectKindFromName(typeBuf.String())
 	if err != nil {
 		return ObjectHeader{}, err
 	}

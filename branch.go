@@ -19,12 +19,12 @@ type RemoveBranchInput struct {
 	Name string
 }
 
-func ValidateBranchName(name string) bool {
-	return ValidateRefName(name) && name != "HEAD"
+func validateBranchName(name string) bool {
+	return validateRefName(name) && name != "HEAD"
 }
 
 func (repo *Repo) addBranch(input AddBranchInput) error {
-	if !ValidateBranchName(input.Name) {
+	if !validateBranchName(input.Name) {
 		return errors.New("invalid branch name")
 	}
 
@@ -45,7 +45,7 @@ func (repo *Repo) addBranch(input AddBranchInput) error {
 	oidHex, _ := repo.ReadHeadRecurMaybe()
 
 	if oidHex != "" {
-		lock, err := NewLockFile(headsDir, input.Name)
+		lock, err := newLockFile(headsDir, input.Name)
 		if err != nil {
 			return err
 		}
@@ -99,6 +99,7 @@ type HeadResult struct {
 	OID   string // valid when IsRef == false
 }
 
+// Returns what HEAD currently points to — either a branch ref or a detached OID.
 func (repo *Repo) Head() (*HeadResult, error) {
 	result, err := repo.readRef("HEAD")
 	if err != nil {

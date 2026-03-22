@@ -8,22 +8,22 @@ import (
 	"sync"
 )
 
-// MemoryObjectStore is an in-memory implementation of ObjectStore.
+// memoryObjectStore is an in-memory implementation of ObjectStore.
 // It stores git objects in a map keyed by hex OID.
-type MemoryObjectStore struct {
+type memoryObjectStore struct {
 	mu      sync.RWMutex
 	objects map[string][]byte // oidHex → raw object data (header + content)
 	hash    HashKind
 }
 
-func NewMemoryObjectStore(hash HashKind) *MemoryObjectStore {
-	return &MemoryObjectStore{
+func newMemoryObjectStore(hash HashKind) *memoryObjectStore {
+	return &memoryObjectStore{
 		objects: make(map[string][]byte),
 		hash:    hash,
 	}
 }
 
-func (s *MemoryObjectStore) WriteObject(header ObjectHeader, reader io.Reader) ([]byte, error) {
+func (s *memoryObjectStore) WriteObject(header ObjectHeader, reader io.Reader) ([]byte, error) {
 	headerStr := fmt.Sprintf("%s %d\x00", header.Kind.Name(), header.Size)
 
 	var buf bytes.Buffer
@@ -45,7 +45,7 @@ func (s *MemoryObjectStore) WriteObject(header ObjectHeader, reader io.Reader) (
 	return oidBytes, nil
 }
 
-func (s *MemoryObjectStore) ReadObject(oidHex string) (ObjectReader, error) {
+func (s *memoryObjectStore) ReadObject(oidHex string) (ObjectReader, error) {
 	s.mu.RLock()
 	data, ok := s.objects[oidHex]
 	s.mu.RUnlock()

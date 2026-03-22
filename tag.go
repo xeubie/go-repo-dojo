@@ -17,7 +17,7 @@ type RemoveTagInput struct {
 }
 
 func (repo *Repo) addTag(input AddTagInput) (string, error) {
-	if !ValidateRefName(input.Name) {
+	if !validateRefName(input.Name) {
 		return "", errors.New("invalid tag name")
 	}
 

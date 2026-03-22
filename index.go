@@ -11,7 +11,7 @@ import (
 	"sort"
 )
 
-type IndexEntry struct {
+type indexEntry struct {
 	ctimeSecs  uint32
 	ctimeNsecs uint32
 	mtimeSecs  uint32
@@ -27,23 +27,23 @@ type IndexEntry struct {
 	path       string
 }
 
-// Index represents a parsed git index file.
-type Index struct {
+// index represents a parsed git index file.
+type index struct {
 	repo          *Repo
 	version       uint32
-	entries       map[string][4]*IndexEntry
+	entries       map[string][4]*indexEntry
 	dirToPaths    map[string]map[string]bool
 	dirToChildren map[string]map[string]bool
 	rootChildren  map[string]bool
 }
 
 // readIndex reads and parses the git index file.
-func (repo *Repo) readIndex() (*Index, error) {
+func (repo *Repo) readIndex() (*index, error) {
 	hashKind := repo.opts.Hash
-	idx := &Index{
+	idx := &index{
 		repo:          repo,
 		version:       2,
-		entries:       make(map[string][4]*IndexEntry),
+		entries:       make(map[string][4]*indexEntry),
 		dirToPaths:    make(map[string]map[string]bool),
 		dirToChildren: make(map[string]map[string]bool),
 		rootChildren:  make(map[string]bool),
@@ -84,7 +84,7 @@ func (repo *Repo) readIndex() (*Index, error) {
 			return nil, fmt.Errorf("truncated index entry")
 		}
 
-		entry := &IndexEntry{
+		entry := &indexEntry{
 			ctimeSecs:  binary.BigEndian.Uint32(data[offset:]),
 			ctimeNsecs: binary.BigEndian.Uint32(data[offset+4:]),
 			mtimeSecs:  binary.BigEndian.Uint32(data[offset+8:]),
@@ -130,7 +130,7 @@ func (repo *Repo) readIndex() (*Index, error) {
 }
 
 // AddPath adds a file from the working directory to the index.
-func (idx *Index) AddPath(filePath string, te *TreeEntry) error {
+func (idx *index) AddPath(filePath string, te *TreeEntry) error {
 	repo := idx.repo
 	fullPath := filepath.Join(repo.workPath, filePath)
 
@@ -140,9 +140,9 @@ func (idx *Index) AddPath(filePath string, te *TreeEntry) error {
 	}
 
 	// remove entries that are parents of this path (directory replaces file)
-	parts := SplitPath(filePath)
+	parts := splitPath(filePath)
 	for i := 1; i < len(parts); i++ {
-		parentPath := JoinPath(parts[:i])
+		parentPath := joinPath(parts[:i])
 		if _, ok := idx.entries[parentPath]; ok {
 			idx.RemovePath(parentPath, nil)
 		}
@@ -182,13 +182,13 @@ func (idx *Index) AddPath(filePath string, te *TreeEntry) error {
 			}
 		}
 		if !modeSet {
-			mode = ModeFromFileInfo(info)
+			mode = modeFromFileInfo(info)
 			if mode.UnixPerm() != 0o755 {
 				mode = Mode(0o100644)
 			}
 		}
 
-		entry := &IndexEntry{
+		entry := &indexEntry{
 			mode:     mode,
 			fileSize: uint32(info.Size()),
 			oid:      oid,
@@ -207,7 +207,7 @@ func (idx *Index) AddPath(filePath string, te *TreeEntry) error {
 			if e.Name() == ".git" {
 				continue
 			}
-			subPath := JoinPath([]string{filePath, e.Name()})
+			subPath := joinPath([]string{filePath, e.Name()})
 			if err := idx.AddPath(subPath, nil); err != nil {
 				return err
 			}
@@ -226,7 +226,7 @@ func (idx *Index) AddPath(filePath string, te *TreeEntry) error {
 		if err != nil {
 			return err
 		}
-		entry := &IndexEntry{
+		entry := &indexEntry{
 			mode:     Mode(0o120000),
 			fileSize: uint32(len(target)),
 			oid:      oid,
@@ -241,7 +241,7 @@ func (idx *Index) AddPath(filePath string, te *TreeEntry) error {
 	}
 }
 
-func (idx *Index) addEntry(entry *IndexEntry) {
+func (idx *index) addEntry(entry *indexEntry) {
 	stage := (entry.flags >> 12) & 0x3
 
 	entries, exists := idx.entries[entry.path]
@@ -256,7 +256,7 @@ func (idx *Index) addEntry(entry *IndexEntry) {
 		entries[stage] = entry
 		idx.entries[entry.path] = entries
 	} else {
-		var newEntries [4]*IndexEntry
+		var newEntries [4]*indexEntry
 		newEntries[stage] = entry
 		idx.entries[entry.path] = newEntries
 	}
@@ -285,13 +285,13 @@ func (idx *Index) addEntry(entry *IndexEntry) {
 
 // addConflictEntries adds conflict entries (stages 1-3) for the given path.
 // treeEntries[0] = base (stage 1), [1] = target (stage 2), [2] = source (stage 3).
-func (idx *Index) addConflictEntries(filePath string, treeEntries [3]*TreeEntry) {
+func (idx *index) addConflictEntries(filePath string, treeEntries [3]*TreeEntry) {
 	for i, te := range treeEntries {
 		if te == nil {
 			continue
 		}
 		stage := uint16(i + 1)
-		entry := &IndexEntry{
+		entry := &indexEntry{
 			mode:  te.Mode,
 			oid:   te.OID,
 			flags: (stage << 12) | (uint16(len(filePath)) & 0xFFF),
@@ -303,7 +303,7 @@ func (idx *Index) addConflictEntries(filePath string, treeEntries [3]*TreeEntry)
 
 // RemovePath removes a path (or all paths under a directory) from the index.
 // If removedPaths is non-nil, removed paths are recorded in it.
-func (idx *Index) RemovePath(filePath string, removedPaths map[string]bool) {
+func (idx *index) RemovePath(filePath string, removedPaths map[string]bool) {
 	// check if it's a direct entry
 	if _, ok := idx.entries[filePath]; ok {
 		delete(idx.entries, filePath)
@@ -329,12 +329,12 @@ func (idx *Index) RemovePath(filePath string, removedPaths map[string]bool) {
 }
 
 // IsDir returns true if the given path is a directory in the index.
-func (idx *Index) IsDir(filePath string) bool {
+func (idx *index) IsDir(filePath string) bool {
 	_, ok := idx.dirToPaths[filePath]
 	return ok
 }
 
-func (idx *Index) rebuildDirMaps() {
+func (idx *index) rebuildDirMaps() {
 	idx.dirToPaths = make(map[string]map[string]bool)
 	idx.dirToChildren = make(map[string]map[string]bool)
 	idx.rootChildren = make(map[string]bool)
@@ -367,16 +367,16 @@ func (idx *Index) rebuildDirMaps() {
 	}
 }
 
-type IndexAction int
+type indexAction int
 
 const (
-	IndexActionAdd IndexAction = iota
-	IndexActionRm
+	indexActionAdd indexAction = iota
+	indexActionRm
 )
 
 // AddOrRemovePath checks if the path exists on disk. If not, it removes it
 // from the index. If it does exist, it either adds or removes based on action.
-func (idx *Index) AddOrRemovePath(filePath string, action IndexAction, removedPaths map[string]bool) error {
+func (idx *index) AddOrRemovePath(filePath string, action indexAction, removedPaths map[string]bool) error {
 	repo := idx.repo
 	fullPath := filepath.Join(repo.workPath, filePath)
 
@@ -387,9 +387,9 @@ func (idx *Index) AddOrRemovePath(filePath string, action IndexAction, removedPa
 			inDir := idx.IsDir(filePath)
 			if !inEntries && !inDir {
 				switch action {
-				case IndexActionAdd:
+				case indexActionAdd:
 					return ErrAddIndexPathNotFound
-				case IndexActionRm:
+				case indexActionRm:
 					return ErrRemoveIndexPathNotFound
 				}
 			}
@@ -400,9 +400,9 @@ func (idx *Index) AddOrRemovePath(filePath string, action IndexAction, removedPa
 	}
 
 	switch action {
-	case IndexActionAdd:
+	case indexActionAdd:
 		return idx.AddPath(filePath, nil)
-	case IndexActionRm:
+	case indexActionRm:
 		_, inEntries := idx.entries[filePath]
 		inDir := idx.IsDir(filePath)
 		if !inEntries && !inDir {
@@ -415,12 +415,12 @@ func (idx *Index) AddOrRemovePath(filePath string, action IndexAction, removedPa
 }
 
 // Write serializes the index to the given file (typically a lock file).
-func (idx *Index) Write(f *os.File) error {
+func (idx *index) Write(f *os.File) error {
 	// collect and sort all entries
 	type sortedEntry struct {
 		path  string
 		stage int
-		entry *IndexEntry
+		entry *indexEntry
 	}
 	var sorted []sortedEntry
 	for p, entries := range idx.entries {

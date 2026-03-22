@@ -38,7 +38,7 @@ func (k ObjectKind) Name() string {
 	return ""
 }
 
-func ObjectKindFromName(name string) (ObjectKind, error) {
+func objectKindFromName(name string) (ObjectKind, error) {
 	switch name {
 	case "blob":
 		return ObjectKindBlob, nil
@@ -64,7 +64,7 @@ func parseObjectHeader(data []byte) (ObjectHeader, int, error) {
 		return ObjectHeader{}, 0, errors.New("invalid object header: no space")
 	}
 
-	kind, err := ObjectKindFromName(string(data[:spaceIdx]))
+	kind, err := objectKindFromName(string(data[:spaceIdx]))
 	if err != nil {
 		return ObjectHeader{}, 0, err
 	}
@@ -154,13 +154,13 @@ func (t *treeBuilder) addTreeEntry(name string, oidBytes []byte) {
 	})
 }
 
-func (t *treeBuilder) addIndexEntries(repo *Repo, idx *Index, prefix string, childNames []string) error {
+func (t *treeBuilder) addIndexEntries(repo *Repo, idx *index, prefix string, childNames []string) error {
 	for _, name := range childNames {
 		var path string
 		if prefix == "" {
 			path = name
 		} else {
-			path = JoinPath([]string{prefix, name})
+			path = joinPath([]string{prefix, name})
 		}
 
 		if entries, ok := idx.entries[path]; ok {
@@ -508,7 +508,6 @@ type ObjectReader interface {
 // ---------------------------------------------------------------------------
 
 // ObjectStore is the interface for pluggable object storage backends.
-// Inspired by go-git's EncodedObjectStorer, but using go-repo-mofo's own types.
 type ObjectStore interface {
 	// ReadObject returns a streaming reader for the object with the given OID.
 	ReadObject(oidHex string) (ObjectReader, error)
@@ -517,6 +516,7 @@ type ObjectStore interface {
 	WriteObject(header ObjectHeader, reader io.Reader) ([]byte, error)
 }
 
+// Returns a streaming reader for the object with the given OID.
 func (repo *Repo) NewObjectReader(oidHex string) (ObjectReader, error) {
 	return repo.store.ReadObject(oidHex)
 }
@@ -569,6 +569,7 @@ type Object struct {
 	reader ObjectReader
 }
 
+// Reads an object by OID, optionally parsing its content when full is true.
 func (repo *Repo) NewObject(oidHex string, full bool) (*Object, error) {
 	rdr, err := repo.NewObjectReader(oidHex)
 	if err != nil {
@@ -725,7 +726,7 @@ func (o *Object) parseTag() error {
 		if strings.HasPrefix(line, "object ") {
 			tc.Target = line[7:]
 		} else if strings.HasPrefix(line, "type ") {
-			k, err := ObjectKindFromName(line[5:])
+			k, err := objectKindFromName(line[5:])
 			if err == nil {
 				tc.Kind = k
 			}
@@ -770,6 +771,7 @@ type ObjectIterator struct {
 	Depth    int // depth of the last object returned by Next
 }
 
+// Creates a graph-walking iterator over reachable objects.
 func (repo *Repo) NewObjectIterator(opts ObjectIteratorOptions) *ObjectIterator {
 	return &ObjectIterator{
 		repo:     repo,
@@ -895,10 +897,9 @@ func (it *ObjectIterator) includeContentRefs(obj *Object, childDepth int) {
 	}
 }
 
-// CopyFromPackIterator writes pack objects as loose objects.
-// Delegates to FileObjectStore if the store supports it.
+// Writes each object from a pack iterator as a loose object in the store.
 func (repo *Repo) CopyFromPackIterator(iter *PackIterator) error {
-	if fs, ok := repo.store.(*FileObjectStore); ok {
+	if fs, ok := repo.store.(*fileObjectStore); ok {
 		return fs.CopyFromPackIterator(iter)
 	}
 	// Generic fallback: read each object and write through the store.

@@ -11,7 +11,7 @@ type RepoOpts struct {
 	Hash       HashKind
 	IsTest     bool
 	BufferSize int
-	Store      ObjectStore // optional; defaults to FileObjectStore
+	Store      ObjectStore // optional; defaults to fileObjectStore
 }
 
 func (o RepoOpts) bufferSize() int {
@@ -60,7 +60,7 @@ func InitRepo(workPath string, opts RepoOpts) (*Repo, error) {
 
 	store := opts.Store
 	if store == nil {
-		store = NewFileObjectStore(gitDir, opts)
+		store = newFileObjectStore(gitDir, opts)
 	}
 
 	repo := &Repo{
@@ -93,7 +93,7 @@ func OpenRepo(workPath string, opts RepoOpts) (*Repo, error) {
 		if _, err := os.Stat(gitDir); err == nil {
 			store := opts.Store
 			if store == nil {
-				store = NewFileObjectStore(gitDir, opts)
+				store = newFileObjectStore(gitDir, opts)
 			}
 			return &Repo{opts: opts, workPath: dir, repoPath: gitDir, store: store}, nil
 		}
@@ -105,6 +105,7 @@ func OpenRepo(workPath string, opts RepoOpts) (*Repo, error) {
 	}
 }
 
+// Adds or updates a configuration entry.
 func (r *Repo) AddConfig(input AddConfigInput) error {
 	config, err := r.loadConfig()
 	if err != nil {
@@ -115,7 +116,7 @@ func (r *Repo) AddConfig(input AddConfigInput) error {
 		return err
 	}
 
-	lock, err := NewLockFile(r.repoPath, "config")
+	lock, err := newLockFile(r.repoPath, "config")
 	if err != nil {
 		return err
 	}
@@ -129,6 +130,7 @@ func (r *Repo) AddConfig(input AddConfigInput) error {
 	return nil
 }
 
+// Removes a configuration entry.
 func (r *Repo) RemoveConfig(input RemoveConfigInput) error {
 	config, err := r.loadConfig()
 	if err != nil {
@@ -139,7 +141,7 @@ func (r *Repo) RemoveConfig(input RemoveConfigInput) error {
 		return err
 	}
 
-	lock, err := NewLockFile(r.repoPath, "config")
+	lock, err := newLockFile(r.repoPath, "config")
 	if err != nil {
 		return err
 	}
@@ -153,10 +155,12 @@ func (r *Repo) RemoveConfig(input RemoveConfigInput) error {
 	return nil
 }
 
+// Returns the full parsed configuration.
 func (r *Repo) ListConfig() (*Config, error) {
 	return r.loadConfig()
 }
 
+// Registers a new remote with the given name and URL.
 func (r *Repo) AddRemote(name, url string) error {
 	config, err := r.loadConfig()
 	if err != nil {
@@ -177,7 +181,7 @@ func (r *Repo) AddRemote(name, url string) error {
 		return err
 	}
 
-	lock, err := NewLockFile(r.repoPath, "config")
+	lock, err := newLockFile(r.repoPath, "config")
 	if err != nil {
 		return err
 	}
@@ -191,6 +195,7 @@ func (r *Repo) AddRemote(name, url string) error {
 	return nil
 }
 
+// Deletes a remote and its fetch config by name.
 func (r *Repo) RemoveRemote(name string) error {
 	config, err := r.loadConfig()
 	if err != nil {
@@ -209,7 +214,7 @@ func (r *Repo) RemoveRemote(name string) error {
 		return err
 	}
 
-	lock, err := NewLockFile(r.repoPath, "config")
+	lock, err := newLockFile(r.repoPath, "config")
 	if err != nil {
 		return err
 	}
@@ -223,6 +228,7 @@ func (r *Repo) RemoveRemote(name string) error {
 	return nil
 }
 
+// Returns configuration entries for all remotes.
 func (r *Repo) ListRemotes() (*Config, error) {
 	config, err := r.loadConfig()
 	if err != nil {
@@ -241,24 +247,27 @@ func (r *Repo) ListRemotes() (*Config, error) {
 	return result, nil
 }
 
+// Stages the given file paths in the index.
 func (r *Repo) Add(paths []string) error {
-	normalized, err := NormalizePaths(r.workPath, paths)
+	normalized, err := normalizePaths(r.workPath, paths)
 	if err != nil {
 		return err
 	}
 	return r.addPaths(normalized)
 }
 
+// Unstages the given paths, restoring their index entries from HEAD.
 func (r *Repo) Unadd(paths []string, opts UnaddOptions) error {
-	normalized, err := NormalizePaths(r.workPath, paths)
+	normalized, err := normalizePaths(r.workPath, paths)
 	if err != nil {
 		return err
 	}
 	return r.unaddPaths(normalized, opts)
 }
 
+// Removes the given paths from the index without deleting them from the working directory.
 func (r *Repo) Untrack(paths []string, force, recursive bool) error {
-	normalized, err := NormalizePaths(r.workPath, paths)
+	normalized, err := normalizePaths(r.workPath, paths)
 	if err != nil {
 		return err
 	}
@@ -269,30 +278,35 @@ func (r *Repo) Untrack(paths []string, force, recursive bool) error {
 	})
 }
 
+// Removes the given paths from the index and optionally from the working directory.
 func (r *Repo) Remove(paths []string, opts RemoveOptions) error {
-	normalized, err := NormalizePaths(r.workPath, paths)
+	normalized, err := normalizePaths(r.workPath, paths)
 	if err != nil {
 		return err
 	}
 	return r.removePaths(normalized, opts)
 }
 
+// Creates a new commit from the current index and returns its OID hex string.
 func (r *Repo) Commit(metadata CommitMetadata) (string, error) {
 	return r.writeCommit(metadata)
 }
 
+// Returns the working directory and index status relative to HEAD.
 func (r *Repo) Status() (*Status, error) {
 	return r.status()
 }
 
+// Restores a file in the working directory to its HEAD tree content.
 func (r *Repo) Restore(path string) error {
-	rel, err := RelativePath(r.workPath, path)
+	rel, err := relativePath(r.workPath, path)
 	if err != nil {
 		return err
 	}
-	return r.restore(JoinPath(SplitPath(rel)))
+	return r.restore(joinPath(splitPath(rel)))
 }
 
+// Points HEAD at the given ref or OID without modifying the index or working directory.
 func (r *Repo) ResetAdd(target RefOrOid) error {
 	if target.IsRef {
 		return r.replaceHead(target)
@@ -300,10 +314,12 @@ func (r *Repo) ResetAdd(target RefOrOid) error {
 	return r.updateHead(target.OID)
 }
 
+// Switches HEAD, the index, and optionally the working directory to a new target.
 func (r *Repo) Switch(input SwitchInput) (*SwitchResult, error) {
 	return r.switchDir(input)
 }
 
+// Returns an iterator over commits reachable from the given OIDs, or from HEAD if none are given.
 func (r *Repo) Log(startOIDs []string) (*ObjectIterator, error) {
 	iter := r.NewObjectIterator(ObjectIteratorOptions{Kind: ObjectIterCommit})
 
@@ -324,26 +340,32 @@ func (r *Repo) Log(startOIDs []string) (*ObjectIterator, error) {
 	return iter, nil
 }
 
+// Creates a new branch pointing at the current HEAD commit.
 func (r *Repo) AddBranch(input AddBranchInput) error {
 	return r.addBranch(input)
 }
 
+// Deletes a branch by name.
 func (r *Repo) RemoveBranch(input RemoveBranchInput) error {
 	return r.removeBranch(input)
 }
 
+// Returns an iterator over all branches.
 func (r *Repo) ListBranches() (*RefIterator, error) {
 	return r.listBranches()
 }
 
+// Creates an annotated tag object pointing at HEAD and returns its OID hex string.
 func (r *Repo) AddTag(input AddTagInput) (string, error) {
 	return r.addTag(input)
 }
 
+// Deletes a tag ref by name.
 func (r *Repo) RemoveTag(input RemoveTagInput) error {
 	return r.removeTag(input)
 }
 
+// Returns an iterator over all tags.
 func (r *Repo) ListTags() (*RefIterator, error) {
 	return r.listTags()
 }

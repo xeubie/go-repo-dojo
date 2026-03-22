@@ -49,7 +49,7 @@ func (m Mode) String() string {
 	return "100644"
 }
 
-func ModeFromFileInfo(info os.FileInfo) Mode {
+func modeFromFileInfo(info os.FileInfo) Mode {
 	if info.Mode()&os.ModeSymlink != 0 {
 		return Mode(0o120000)
 	}
@@ -59,10 +59,10 @@ func ModeFromFileInfo(info os.FileInfo) Mode {
 	return Mode(0o100644)
 }
 
-// LockFile implements atomic file writes via a temporary .lock file.
+// lockFile implements atomic file writes via a temporary .lock file.
 // On Close, if Success is true, the lock file is renamed to the target;
 // otherwise it is deleted.
-type LockFile struct {
+type lockFile struct {
 	dir      string
 	fileName string
 	lockPath string
@@ -70,13 +70,13 @@ type LockFile struct {
 	Success  bool
 }
 
-func NewLockFile(dir, fileName string) (*LockFile, error) {
+func newLockFile(dir, fileName string) (*lockFile, error) {
 	lockPath := filepath.Join(dir, fileName+".lock")
 	file, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return nil, err
 	}
-	return &LockFile{
+	return &lockFile{
 		dir:      dir,
 		fileName: fileName,
 		lockPath: lockPath,
@@ -84,7 +84,7 @@ func NewLockFile(dir, fileName string) (*LockFile, error) {
 	}, nil
 }
 
-func (l *LockFile) Close() {
+func (l *lockFile) Close() {
 	l.File.Close()
 	if l.Success {
 		targetPath := filepath.Join(l.dir, l.fileName)
@@ -97,9 +97,9 @@ func (l *LockFile) Close() {
 	}
 }
 
-// JoinPath joins path components with "/" (always forward slash).
+// joinPath joins path components with "/" (always forward slash).
 // Empty components and "." are skipped.
-func JoinPath(parts []string) string {
+func joinPath(parts []string) string {
 	var nonEmpty []string
 	for _, p := range parts {
 		if p != "" && p != "." {
@@ -112,9 +112,9 @@ func JoinPath(parts []string) string {
 	return strings.Join(nonEmpty, "/")
 }
 
-// RelativePath resolves a path relative to the working directory and ensures
+// relativePath resolves a path relative to the working directory and ensures
 // it falls within the repo's work path. Returns the path relative to workPath.
-func RelativePath(workPath, path string) (string, error) {
+func relativePath(workPath, path string) (string, error) {
 	resolved := path
 	if !filepath.IsAbs(path) {
 		resolved = filepath.Join(workPath, path)
@@ -133,8 +133,8 @@ func RelativePath(workPath, path string) (string, error) {
 	return filepath.ToSlash(rel), nil
 }
 
-// SplitPath splits a forward-slash path into its components.
-func SplitPath(path string) []string {
+// splitPath splits a forward-slash path into its components.
+func splitPath(path string) []string {
 	path = filepath.ToSlash(path)
 	var parts []string
 	for _, p := range strings.Split(path, "/") {
@@ -145,15 +145,15 @@ func SplitPath(path string) []string {
 	return parts
 }
 
-// NormalizePaths resolves each path relative to workPath and normalizes it.
-func NormalizePaths(workPath string, paths []string) ([]string, error) {
+// normalizePaths resolves each path relative to workPath and normalizes it.
+func normalizePaths(workPath string, paths []string) ([]string, error) {
 	normalized := make([]string, 0, len(paths))
 	for _, p := range paths {
-		rel, err := RelativePath(workPath, p)
+		rel, err := relativePath(workPath, p)
 		if err != nil {
 			return nil, err
 		}
-		normalized = append(normalized, JoinPath(SplitPath(rel)))
+		normalized = append(normalized, joinPath(splitPath(rel)))
 	}
 	return normalized, nil
 }

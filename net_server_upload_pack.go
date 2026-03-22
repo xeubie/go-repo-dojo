@@ -604,6 +604,7 @@ type v2Config struct {
 	allowPackfileURIs   bool
 }
 
+// Runs the server-side upload-pack protocol to send objects to a client.
 func (repo *Repo) UploadPack(r io.Reader, w io.Writer, options UploadPackOptions) error {
 	switch options.ProtocolVersion {
 	case 2:
@@ -1375,7 +1376,7 @@ func uploadPackV2(w io.Writer, repo *Repo, r io.Reader) error {
 		}
 		if up.allowRefInWant && strings.HasPrefix(arg, "want-ref ") {
 			refName := arg[9:]
-			ref := RefFromPath(refName, nil)
+			ref := refFromPath(refName, nil)
 			if ref == nil {
 				writePktError(w, up.writerUseSideband, fmt.Sprintf("unknown ref %s", refName))
 				return fmt.Errorf("client error")
@@ -1581,7 +1582,7 @@ func processDeepenNot(repo *Repo, line string) (string, bool) {
 	arg := line[11:]
 
 	// try as full ref path
-	ref := RefFromPath(arg, nil)
+	ref := refFromPath(arg, nil)
 	if ref != nil {
 		oid, err := repo.ReadRef(*ref)
 		if err == nil && oid != "" {

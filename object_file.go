@@ -9,18 +9,18 @@ import (
 	"path/filepath"
 )
 
-// FileObjectStore stores git objects on the filesystem as loose objects
+// fileObjectStore stores git objects on the filesystem as loose objects
 // and pack files, implementing the standard .git/objects layout.
-type FileObjectStore struct {
+type fileObjectStore struct {
 	repoPath string
 	opts     RepoOpts
 }
 
-func NewFileObjectStore(repoPath string, opts RepoOpts) *FileObjectStore {
-	return &FileObjectStore{repoPath: repoPath, opts: opts}
+func newFileObjectStore(repoPath string, opts RepoOpts) *fileObjectStore {
+	return &fileObjectStore{repoPath: repoPath, opts: opts}
 }
 
-func (s *FileObjectStore) WriteObject(header ObjectHeader, reader io.Reader) ([]byte, error) {
+func (s *fileObjectStore) WriteObject(header ObjectHeader, reader io.Reader) ([]byte, error) {
 	headerStr := fmt.Sprintf("%s %d\x00", header.Kind.Name(), header.Size)
 
 	tempFile, err := os.CreateTemp(s.repoPath, "object.temp.*")
@@ -59,7 +59,7 @@ func (s *FileObjectStore) WriteObject(header ObjectHeader, reader io.Reader) ([]
 		return nil, err
 	}
 
-	lock, err := NewLockFile(objDir, oidHex[2:])
+	lock, err := newLockFile(objDir, oidHex[2:])
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (s *FileObjectStore) WriteObject(header ObjectHeader, reader io.Reader) ([]
 	return oidBytes, nil
 }
 
-func (s *FileObjectStore) ReadObject(oidHex string) (ObjectReader, error) {
+func (s *fileObjectStore) ReadObject(oidHex string) (ObjectReader, error) {
 	loose, err := s.openLooseObject(oidHex)
 	if err == nil {
 		return loose, nil
@@ -92,7 +92,7 @@ func (s *FileObjectStore) ReadObject(oidHex string) (ObjectReader, error) {
 	return pack, nil
 }
 
-func (s *FileObjectStore) openLooseObject(oidHex string) (*LooseObjectReader, error) {
+func (s *fileObjectStore) openLooseObject(oidHex string) (*looseObjectReader, error) {
 	objPath := filepath.Join(s.repoPath, "objects", oidHex[:2], oidHex[2:])
 	f, err := os.Open(objPath)
 	if err != nil {
@@ -109,11 +109,11 @@ func (s *FileObjectStore) openLooseObject(oidHex string) (*LooseObjectReader, er
 		f.Close()
 		return nil, err
 	}
-	return &LooseObjectReader{file: f, zlibReader: zlibR, header: header}, nil
+	return &looseObjectReader{file: f, zlibReader: zlibR, header: header}, nil
 }
 
 // CopyFromPackIterator writes pack objects as loose objects.
-func (s *FileObjectStore) CopyFromPackIterator(iter *PackIterator) error {
+func (s *fileObjectStore) CopyFromPackIterator(iter *PackIterator) error {
 	offsetToOID := make(map[uint64][]byte)
 
 	for {
@@ -140,16 +140,16 @@ func (s *FileObjectStore) CopyFromPackIterator(iter *PackIterator) error {
 }
 
 // ---------------------------------------------------------------------------
-// LooseObjectReader
+// looseObjectReader
 // ---------------------------------------------------------------------------
 
-type LooseObjectReader struct {
+type looseObjectReader struct {
 	file       *os.File
 	zlibReader io.ReadCloser
 	header     ObjectHeader
 }
 
-func (r *LooseObjectReader) Close() {
+func (r *looseObjectReader) Close() {
 	if r.zlibReader != nil {
 		r.zlibReader.Close()
 	}
@@ -158,7 +158,7 @@ func (r *LooseObjectReader) Close() {
 	}
 }
 
-func (r *LooseObjectReader) Reset() error {
+func (r *looseObjectReader) Reset() error {
 	if r.zlibReader != nil {
 		r.zlibReader.Close()
 	}
@@ -183,15 +183,15 @@ func (r *LooseObjectReader) Reset() error {
 	return nil
 }
 
-func (r *LooseObjectReader) Read(p []byte) (int, error) {
+func (r *looseObjectReader) Read(p []byte) (int, error) {
 	return r.zlibReader.Read(p)
 }
 
-func (r *LooseObjectReader) Header() ObjectHeader {
+func (r *looseObjectReader) Header() ObjectHeader {
 	return r.header
 }
 
-func (r *LooseObjectReader) SkipBytes(n uint64) error {
+func (r *looseObjectReader) SkipBytes(n uint64) error {
 	var buf [512]byte
 	rem := n
 	for rem > 0 {
@@ -208,6 +208,6 @@ func (r *LooseObjectReader) SkipBytes(n uint64) error {
 	return nil
 }
 
-func (r *LooseObjectReader) Position() uint64 {
+func (r *looseObjectReader) Position() uint64 {
 	return 0
 }

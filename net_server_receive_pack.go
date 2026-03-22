@@ -319,7 +319,7 @@ func (rp *receivePack) applyRefUpdate(w io.Writer, repo *Repo, update *refUpdate
 	}
 
 	if !strings.HasPrefix(name, "refs/") ||
-		!ValidateRefName(nameAfterRefs) ||
+		!validateRefName(nameAfterRefs) ||
 		(!isNullOID(update.newOID) && !strings.Contains(nameAfterRefs, "/")) {
 		writeReceiveError(w, fmt.Sprintf("refusing to update funny ref '%s' remotely", name))
 		return "funny refname"
@@ -463,7 +463,7 @@ func (repo *Repo) removeRef(refPath string) error {
 	return nil
 }
 
-// ReceivePack runs the server-side receive-pack protocol.
+// Runs the server-side receive-pack protocol to accept objects from a client.
 func (repo *Repo) ReceivePack(r io.Reader, w io.Writer, options ReceivePackOptions) error {
 	rp := newReceivePack()
 

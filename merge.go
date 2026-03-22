@@ -296,7 +296,7 @@ func writeBlobWithDiff3(
 	hasConflict *bool,
 ) ([]byte, error) {
 	// create line iterators from object store
-	var baseIter *LineIterator
+	var baseIter *lineIterator
 	if baseFileOID != nil {
 		rdr, err := repo.store.ReadObject(hex.EncodeToString(baseFileOID))
 		if err != nil {
@@ -370,10 +370,10 @@ func writeBlobWithDiff3(
 
 // diff3Stream implements io.Reader, producing merged content on-the-fly.
 type diff3Stream struct {
-	baseIter       *LineIterator
-	targetIter     *LineIterator
-	sourceIter     *LineIterator
-	diff3Iter      *Diff3Iterator
+	baseIter       *lineIterator
+	targetIter     *lineIterator
+	sourceIter     *lineIterator
+	diff3Iter      *diff3Iterator
 	targetMarker   string
 	baseMarker     string
 	separateMarker string
@@ -431,7 +431,7 @@ func (s *diff3Stream) readStep(buf []byte) (int, error) {
 					s.currentLine = nil
 				}
 				// if we aren't at the very last line, add a newline character
-				if s.currentLine != nil || !s.diff3Iter.Finished {
+				if s.currentLine != nil || !s.diff3Iter.finished {
 					buf[size] = '\n'
 					return size + 1, nil
 				}
@@ -449,7 +449,7 @@ func (s *diff3Stream) readStep(buf []byte) (int, error) {
 	}
 
 	switch chunk.Kind {
-	case Diff3Clean:
+	case diff3Clean:
 		if chunk.ORange != nil {
 			for lineNum := chunk.ORange.Begin; lineNum < chunk.ORange.End; lineNum++ {
 				line, err := s.baseIter.get(lineNum)
@@ -462,7 +462,7 @@ func (s *diff3Stream) readStep(buf []byte) (int, error) {
 				s.currentLine = &s.lineBuffer[0]
 			}
 		}
-	case Diff3Conflict:
+	case diff3Conflict:
 		baseLines := linesFromRange(s.baseIter, chunk.ORange)
 		targetLines := linesFromRange(s.targetIter, chunk.ARange)
 		sourceLines := linesFromRange(s.sourceIter, chunk.BRange)
@@ -531,7 +531,7 @@ func (s *diff3Stream) count() (int, error) {
 	return n, nil
 }
 
-func linesFromRange(iter *LineIterator, r *Diff3Range) []string {
+func linesFromRange(iter *lineIterator, r *diff3Range) []string {
 	if r == nil {
 		return nil
 	}
@@ -562,7 +562,7 @@ func sliceEqual(a, b []string) bool {
 // samePathConflict
 // ---------------------------------------------------------------------------
 
-type SamePathConflictResult struct {
+type samePathConflictResult struct {
 	Change   *TreeChange
 	Conflict *MergeConflict
 }
@@ -574,7 +574,7 @@ func samePathConflict(
 	targetChangeMaybe *TreeChange,
 	sourceChange TreeChange,
 	path string,
-) (*SamePathConflictResult, error) {
+) (*samePathConflictResult, error) {
 	if targetChangeMaybe != nil {
 		targetChange := *targetChangeMaybe
 		baseEntryMaybe := sourceChange.Old
@@ -584,7 +584,7 @@ func samePathConflict(
 			sourceEntry := sourceChange.New
 
 			if bytes.Equal(targetEntry.OID, sourceEntry.OID) && targetEntry.Mode == sourceEntry.Mode {
-				return &SamePathConflictResult{}, nil
+				return &samePathConflictResult{}, nil
 			}
 
 			// three-way merge of OIDs
@@ -634,7 +634,7 @@ func samePathConflict(
 				mode = *modeMaybe
 			}
 
-			result := &SamePathConflictResult{
+			result := &samePathConflictResult{
 				Change: &TreeChange{
 					Old: targetChange.New,
 					New: &TreeEntry{OID: oid, Mode: mode},
@@ -649,7 +649,7 @@ func samePathConflict(
 			}
 			return result, nil
 		} else if targetChange.New != nil && sourceChange.New == nil {
-			return &SamePathConflictResult{
+			return &samePathConflictResult{
 				Change: &TreeChange{
 					Old: targetChange.New,
 					New: &TreeEntry{OID: targetChange.New.OID, Mode: targetChange.New.Mode},
@@ -661,7 +661,7 @@ func samePathConflict(
 				},
 			}, nil
 		} else if targetChange.New == nil && sourceChange.New != nil {
-			return &SamePathConflictResult{
+			return &samePathConflictResult{
 				Change: &TreeChange{
 					Old: targetChange.New,
 					New: &TreeEntry{OID: sourceChange.New.OID, Mode: sourceChange.New.Mode},
@@ -674,12 +674,12 @@ func samePathConflict(
 			}, nil
 		} else {
 			// deleted in both
-			return &SamePathConflictResult{}, nil
+			return &samePathConflictResult{}, nil
 		}
 	}
 
 	// no conflict because the target diff doesn't touch this path
-	return &SamePathConflictResult{
+	return &samePathConflictResult{
 		Change: &TreeChange{Old: sourceChange.Old, New: sourceChange.New},
 	}, nil
 }
@@ -836,6 +836,7 @@ type MergeResult struct {
 // Merge
 // ---------------------------------------------------------------------------
 
+// Performs a merge or cherry-pick of the source ref into the current branch.
 func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 	// get the current branch name and oid
 	headRef, err := repo.readRef("HEAD")
@@ -1004,7 +1005,7 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 
 		// update the index under a lock
 		if err := func() error {
-			lock, err := NewLockFile(repo.repoPath, "index")
+			lock, err := newLockFile(repo.repoPath, "index")
 			if err != nil {
 				return err
 			}

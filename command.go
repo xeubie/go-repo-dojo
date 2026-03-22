@@ -6,155 +6,155 @@ import (
 	"strings"
 )
 
-type CommandKind int
+type commandKind int
 
 const (
-	CommandInit CommandKind = iota
-	CommandAdd
-	CommandUnadd
-	CommandUntrack
-	CommandRm
-	CommandCommit
-	CommandTag
-	CommandStatus
-	CommandBranch
-	CommandSwitchDir
-	CommandReset
-	CommandResetDir
-	CommandResetAdd
-	CommandRestore
-	CommandLog
-	CommandConfig
-	CommandRemote
-	CommandMerge
-	CommandCherryPick
-	CommandReceivePack
-	CommandUploadPack
-	CommandHTTPBackend
+	commandInit commandKind = iota
+	commandAdd
+	commandUnadd
+	commandUntrack
+	commandRm
+	commandCommit
+	commandTag
+	commandStatus
+	commandBranch
+	commandSwitchDir
+	commandReset
+	commandResetDir
+	commandResetAdd
+	commandRestore
+	commandLog
+	commandConfig
+	commandRemote
+	commandMerge
+	commandCherryPick
+	commandReceivePack
+	commandUploadPack
+	commandHTTPBackend
 )
 
-var commandNames = map[CommandKind]string{
-	CommandInit:        "init",
-	CommandAdd:         "add",
-	CommandUnadd:       "unadd",
-	CommandUntrack:     "untrack",
-	CommandRm:          "rm",
-	CommandCommit:      "commit",
-	CommandTag:         "tag",
-	CommandStatus:      "status",
-	CommandBranch:      "branch",
-	CommandSwitchDir:   "switch",
-	CommandReset:       "reset",
-	CommandResetDir:    "reset-dir",
-	CommandResetAdd:    "reset-add",
-	CommandRestore:     "restore",
-	CommandLog:         "log",
-	CommandConfig:      "config",
-	CommandRemote:      "remote",
-	CommandMerge:       "merge",
-	CommandCherryPick:  "cherry-pick",
-	CommandReceivePack: "receive-pack",
-	CommandUploadPack:  "upload-pack",
-	CommandHTTPBackend: "http-backend",
+var commandNames = map[commandKind]string{
+	commandInit:        "init",
+	commandAdd:         "add",
+	commandUnadd:       "unadd",
+	commandUntrack:     "untrack",
+	commandRm:          "rm",
+	commandCommit:      "commit",
+	commandTag:         "tag",
+	commandStatus:      "status",
+	commandBranch:      "branch",
+	commandSwitchDir:   "switch",
+	commandReset:       "reset",
+	commandResetDir:    "reset-dir",
+	commandResetAdd:    "reset-add",
+	commandRestore:     "restore",
+	commandLog:         "log",
+	commandConfig:      "config",
+	commandRemote:      "remote",
+	commandMerge:       "merge",
+	commandCherryPick:  "cherry-pick",
+	commandReceivePack: "receive-pack",
+	commandUploadPack:  "upload-pack",
+	commandHTTPBackend: "http-backend",
 }
 
-var commandDescrips = map[CommandKind]string{
-	CommandInit:        "create an empty repository.",
-	CommandAdd:         "add file contents to the index.",
-	CommandUnadd:       "remove any changes to a file that were added to the index.",
-	CommandUntrack:     "no longer track file in the index, but leave it in the work dir.",
-	CommandRm:          "no longer track file in the index *and* remove it from the work dir.",
-	CommandCommit:      "create a new commit.",
-	CommandTag:         "add, remove, and list tags.",
-	CommandStatus:      "show the status of uncommitted changes.",
-	CommandBranch:      "add, remove, and list branches.",
-	CommandSwitchDir:   "switch to a branch or commit id.",
-	CommandReset:       "make the current branch point to a new commit id.\nupdates the index, but the files in the work dir are left alone.",
-	CommandResetDir:    "make the current branch point to a new commit id.\nupdates both the index and the work dir.\nsimilar to `git reset --hard`.",
-	CommandResetAdd:    "make the current branch point to a new commit id.\ndoes not update the index or the work dir.\nthis is like calling reset and then adding everything to the index.\nsimilar to `git reset --soft`.",
-	CommandRestore:     "restore files in the work dir.",
-	CommandLog:         "show commit logs.",
-	CommandConfig:      "add, remove, and list config options.",
-	CommandRemote:      "add, remove, and list remotes.",
-	CommandMerge:       "join two or more development histories together.",
-	CommandCherryPick:  "apply the changes introduced by some existing commits.",
-	CommandReceivePack: "receive what is pushed into the repository.",
-	CommandUploadPack:  "send what is fetched from the repository.",
-	CommandHTTPBackend: "a CGI program forwarding receive-pack and upload-pack over HTTP.",
+var commandDescrips = map[commandKind]string{
+	commandInit:        "create an empty repository.",
+	commandAdd:         "add file contents to the index.",
+	commandUnadd:       "remove any changes to a file that were added to the index.",
+	commandUntrack:     "no longer track file in the index, but leave it in the work dir.",
+	commandRm:          "no longer track file in the index *and* remove it from the work dir.",
+	commandCommit:      "create a new commit.",
+	commandTag:         "add, remove, and list tags.",
+	commandStatus:      "show the status of uncommitted changes.",
+	commandBranch:      "add, remove, and list branches.",
+	commandSwitchDir:   "switch to a branch or commit id.",
+	commandReset:       "make the current branch point to a new commit id.\nupdates the index, but the files in the work dir are left alone.",
+	commandResetDir:    "make the current branch point to a new commit id.\nupdates both the index and the work dir.\nsimilar to `git reset --hard`.",
+	commandResetAdd:    "make the current branch point to a new commit id.\ndoes not update the index or the work dir.\nthis is like calling reset and then adding everything to the index.\nsimilar to `git reset --soft`.",
+	commandRestore:     "restore files in the work dir.",
+	commandLog:         "show commit logs.",
+	commandConfig:      "add, remove, and list config options.",
+	commandRemote:      "add, remove, and list remotes.",
+	commandMerge:       "join two or more development histories together.",
+	commandCherryPick:  "apply the changes introduced by some existing commits.",
+	commandReceivePack: "receive what is pushed into the repository.",
+	commandUploadPack:  "send what is fetched from the repository.",
+	commandHTTPBackend: "a CGI program forwarding receive-pack and upload-pack over HTTP.",
 }
 
-var commandExamples = map[CommandKind]string{
-	CommandInit: `in the current dir:
+var commandExamples = map[commandKind]string{
+	commandInit: `in the current dir:
     repomofo init
 in a new dir:
     repomofo init myproject`,
-	CommandAdd: `repomofo add myfile.txt`,
-	CommandUnadd: `repomofo unadd myfile.txt
+	commandAdd: `repomofo add myfile.txt`,
+	commandUnadd: `repomofo unadd myfile.txt
 repomofo unadd -r mydir`,
-	CommandUntrack: `repomofo untrack myfile.txt
+	commandUntrack: `repomofo untrack myfile.txt
 repomofo untrack -r mydir`,
-	CommandRm: `repomofo rm myfile.txt
+	commandRm: `repomofo rm myfile.txt
 repomofo rm -r mydir`,
-	CommandCommit: `repomofo commit -m "my commit message"`,
-	CommandTag: `add tag:
+	commandCommit: `repomofo commit -m "my commit message"`,
+	commandTag: `add tag:
     repomofo tag add mytag
 remove tag:
     repomofo tag rm mytag
 list tags:
     repomofo tag list`,
-	CommandStatus: `repomofo status`,
-	CommandBranch: `add branch:
+	commandStatus: `repomofo status`,
+	commandBranch: `add branch:
     repomofo branch add mybranch
 remove branch:
     repomofo branch rm mybranch
 list branches:
     repomofo branch list`,
-	CommandSwitchDir: `switch to branch:
+	commandSwitchDir: `switch to branch:
     repomofo switch mybranch
 switch to commit id:
     repomofo switch a1b2c3...`,
-	CommandReset: `reset current branch to match another branch:
+	commandReset: `reset current branch to match another branch:
     repomofo reset mybranch
 reset current branch to point to a new commit id:
     repomofo reset a1b2c3...`,
-	CommandResetDir: `reset current branch to match another branch:
+	commandResetDir: `reset current branch to match another branch:
     repomofo reset-dir mybranch
 reset current branch to point to a new commit id:
     repomofo reset-dir a1b2c3...`,
-	CommandResetAdd: `reset current branch to point to a new commit id:
+	commandResetAdd: `reset current branch to point to a new commit id:
     repomofo reset-add a1b2c3...`,
-	CommandRestore: `repomofo restore myfile.txt`,
-	CommandLog: `display log:
+	commandRestore: `repomofo restore myfile.txt`,
+	commandLog: `display log:
     repomofo log
 display specified branch:
     repomofo log branch_name`,
-	CommandConfig: `add config:
+	commandConfig: `add config:
     repomofo config add core.editor vim
 remove config:
     repomofo config rm core.editor
 list configs:
     repomofo config list`,
-	CommandRemote: `add remote:
+	commandRemote: `add remote:
     repomofo remote add origin https://github.com/...
 remove remote:
     repomofo remote rm origin
 list remotes:
     repomofo remote list`,
-	CommandMerge: `merge branch:
+	commandMerge: `merge branch:
     repomofo merge mybranch
 continue after merge conflict resolution:
     repomofo merge --continue
 abort merge:
     repomofo merge --abort`,
-	CommandCherryPick: `cherry pick a commit:
+	commandCherryPick: `cherry pick a commit:
     repomofo cherry-pick a1b2c3...
 continue after conflict resolution:
     repomofo cherry-pick --continue
 abort cherry-pick:
     repomofo cherry-pick --abort`,
-	CommandReceivePack: `repomofo receive-pack <directory>`,
-	CommandUploadPack:  `repomofo upload-pack <directory>`,
-	CommandHTTPBackend: `repomofo http-backend`,
+	commandReceivePack: `repomofo receive-pack <directory>`,
+	commandUploadPack:  `repomofo upload-pack <directory>`,
+	commandHTTPBackend: `repomofo http-backend`,
 }
 
 // valueFlags are flags that can have a value associated with them.
@@ -162,15 +162,15 @@ var valueFlags = map[string]bool{
 	"-m": true,
 }
 
-type CommandArgs struct {
-	CommandKind    *CommandKind
+type commandArgs struct {
+	commandKind    *commandKind
 	CommandName    *string
 	PositionalArgs []string
 	MapArgs        map[string]*string // nil value means flag present but no value
 	UnusedArgs     map[string]bool
 }
 
-func ParseCommandArgs(args []string) *CommandArgs {
+func parseCommandArgs(args []string) *commandArgs {
 	var positionalArgs []string
 	mapArgs := make(map[string]*string)
 	unusedArgs := make(map[string]bool)
@@ -196,7 +196,7 @@ func ParseCommandArgs(args []string) *CommandArgs {
 		}
 	}
 
-	ca := &CommandArgs{
+	ca := &commandArgs{
 		PositionalArgs: positionalArgs,
 		MapArgs:        mapArgs,
 		UnusedArgs:     unusedArgs,
@@ -213,7 +213,7 @@ func ParseCommandArgs(args []string) *CommandArgs {
 	for kind, name := range commandNames {
 		if name == cmdName {
 			k := kind
-			ca.CommandKind = &k
+			ca.commandKind = &k
 			break
 		}
 	}
@@ -221,7 +221,7 @@ func ParseCommandArgs(args []string) *CommandArgs {
 	return ca
 }
 
-func (ca *CommandArgs) Contains(arg string) bool {
+func (ca *commandArgs) Contains(arg string) bool {
 	delete(ca.UnusedArgs, arg)
 	_, ok := ca.MapArgs[arg]
 	return ok
@@ -230,7 +230,7 @@ func (ca *CommandArgs) Contains(arg string) bool {
 // Get returns (value, true) if the flag is present. value may be "" if
 // the flag was present but had no associated value.
 // Returns ("", false) if the flag is not present.
-func (ca *CommandArgs) Get(arg string) (string, bool) {
+func (ca *commandArgs) Get(arg string) (string, bool) {
 	delete(ca.UnusedArgs, arg)
 	val, ok := ca.MapArgs[arg]
 	if !ok {
@@ -242,184 +242,184 @@ func (ca *CommandArgs) Get(arg string) (string, bool) {
 	return *val, true
 }
 
-var ErrCommitMessageNotFound = fmt.Errorf("commit message not found")
+var errCommitMessageNotFound = fmt.Errorf("commit message not found")
 
-// RefOrOidFromUser parses a user-supplied string as either a hex OID or a branch ref.
-func RefOrOidFromUser(s string, hashKind HashKind) *RefOrOid {
+// refOrOidFromUser parses a user-supplied string as either a hex OID or a branch ref.
+func refOrOidFromUser(s string, hashKind HashKind) *RefOrOid {
 	if isHexString(s) && len(s) == hashKind.HexLen() {
 		return &RefOrOid{OID: s}
 	}
-	if ValidateRefName(s) {
+	if validateRefName(s) {
 		return &RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: s}}
 	}
 	return nil
 }
 
-type InitCommand struct {
+type initCommand struct {
 	Dir string
 }
 
-type AddCommand struct {
+type addCommand struct {
 	Paths []string
 }
 
-type UnaddCommand struct {
+type unaddCommand struct {
 	Paths []string
 	Opts  UnaddOptions
 }
 
-type UntrackCommand struct {
+type untrackCommand struct {
 	Paths     []string
 	Force     bool
 	Recursive bool
 }
 
-type RmCommand struct {
+type rmCommand struct {
 	Paths []string
 	Opts  RemoveOptions
 }
 
-type CommitCommand struct {
+type commitCommand struct {
 	Message    string
 	AllowEmpty bool
 }
 
-type TagCommandKind int
+type tagCommandKind int
 
 const (
-	TagList TagCommandKind = iota
-	TagAdd
-	TagRemove
+	tagList tagCommandKind = iota
+	tagAdd
+	tagRemove
 )
 
-type TagCommand struct {
-	SubKind TagCommandKind
+type tagCommand struct {
+	SubKind tagCommandKind
 	Name    string // for add/remove
 	Message string // for add (optional)
 }
 
-type BranchCommandKind int
+type branchCommandKind int
 
 const (
-	BranchList BranchCommandKind = iota
-	BranchAdd
-	BranchRemove
+	branchList branchCommandKind = iota
+	branchAdd
+	branchRemove
 )
 
-type BranchCommand struct {
-	SubKind BranchCommandKind
+type branchCommand struct {
+	SubKind branchCommandKind
 	Name    string // for add/remove
 }
 
-type SwitchCommand struct {
+type switchCommand struct {
 	Target RefOrOid
 	Force  bool
 }
 
-type ResetAddCommand struct {
+type resetAddCommand struct {
 	Target RefOrOid // OID only
 }
 
-type MergeCommand struct {
+type mergeCommand struct {
 	Input MergeInput
 }
 
-type ReceivePackCommand struct {
+type receivePackCommand struct {
 	Dir     string
 	Options ReceivePackOptions
 }
 
-type UploadPackCommand struct {
+type uploadPackCommand struct {
 	Dir     string
 	Options UploadPackOptions
 }
 
-type Command struct {
-	Kind        CommandKind
-	Init        *InitCommand
-	Add         *AddCommand
-	Unadd       *UnaddCommand
-	Untrack     *UntrackCommand
-	Rm          *RmCommand
-	Commit      *CommitCommand
-	Tag         *TagCommand
-	Branch      *BranchCommand
-	Switch      *SwitchCommand
-	ResetAdd    *ResetAddCommand
-	Restore     *RestoreCommand
-	Log         *LogCommand
-	Config      *ConfigCommand
-	Remote      *ConfigCommand
-	Merge       *MergeCommand
-	ReceivePack *ReceivePackCommand
-	UploadPack  *UploadPackCommand
+type command struct {
+	Kind        commandKind
+	Init        *initCommand
+	Add         *addCommand
+	Unadd       *unaddCommand
+	Untrack     *untrackCommand
+	Rm          *rmCommand
+	Commit      *commitCommand
+	Tag         *tagCommand
+	Branch      *branchCommand
+	Switch      *switchCommand
+	ResetAdd    *resetAddCommand
+	Restore     *restoreCommand
+	Log         *logCommand
+	Config      *configCommand
+	Remote      *configCommand
+	Merge       *mergeCommand
+	ReceivePack *receivePackCommand
+	UploadPack  *uploadPackCommand
 }
 
-type RestoreCommand struct {
+type restoreCommand struct {
 	Path string
 }
 
-type LogCommand struct {
+type logCommand struct {
 	Targets []RefOrOid
 }
 
-type ConfigCommandKind int
+type configCommandKind int
 
 const (
-	ConfigList ConfigCommandKind = iota
-	ConfigAdd
-	ConfigRemove
+	configList configCommandKind = iota
+	configAdd
+	configRemove
 )
 
-type ConfigCommand struct {
-	SubKind ConfigCommandKind
+type configCommand struct {
+	SubKind configCommandKind
 	Name    string // for add/remove
 	Value   string // for add
 }
 
-func parseCommand(cmdArgs *CommandArgs) *Command {
-	if cmdArgs.CommandKind == nil {
+func parseCommand(cmdArgs *commandArgs) *command {
+	if cmdArgs.commandKind == nil {
 		return nil
 	}
-	switch *cmdArgs.CommandKind {
-	case CommandInit:
+	switch *cmdArgs.commandKind {
+	case commandInit:
 		if len(cmdArgs.PositionalArgs) == 0 {
-			return &Command{Kind: CommandInit, Init: &InitCommand{Dir: "."}}
+			return &command{Kind: commandInit, Init: &initCommand{Dir: "."}}
 		} else if len(cmdArgs.PositionalArgs) == 1 {
-			return &Command{Kind: CommandInit, Init: &InitCommand{Dir: cmdArgs.PositionalArgs[0]}}
+			return &command{Kind: commandInit, Init: &initCommand{Dir: cmdArgs.PositionalArgs[0]}}
 		}
 		return nil
 
-	case CommandAdd:
+	case commandAdd:
 		if len(cmdArgs.PositionalArgs) == 0 {
 			return nil
 		}
-		return &Command{Kind: CommandAdd, Add: &AddCommand{Paths: cmdArgs.PositionalArgs}}
+		return &command{Kind: commandAdd, Add: &addCommand{Paths: cmdArgs.PositionalArgs}}
 
-	case CommandUnadd:
+	case commandUnadd:
 		if len(cmdArgs.PositionalArgs) == 0 {
 			return nil
 		}
-		return &Command{Kind: CommandUnadd, Unadd: &UnaddCommand{
+		return &command{Kind: commandUnadd, Unadd: &unaddCommand{
 			Paths: cmdArgs.PositionalArgs,
 			Opts:  UnaddOptions{Recursive: cmdArgs.Contains("-r")},
 		}}
 
-	case CommandUntrack:
+	case commandUntrack:
 		if len(cmdArgs.PositionalArgs) == 0 {
 			return nil
 		}
-		return &Command{Kind: CommandUntrack, Untrack: &UntrackCommand{
+		return &command{Kind: commandUntrack, Untrack: &untrackCommand{
 			Paths:     cmdArgs.PositionalArgs,
 			Force:     cmdArgs.Contains("-f"),
 			Recursive: cmdArgs.Contains("-r"),
 		}}
 
-	case CommandRm:
+	case commandRm:
 		if len(cmdArgs.PositionalArgs) == 0 {
 			return nil
 		}
-		return &Command{Kind: CommandRm, Rm: &RmCommand{
+		return &command{Kind: commandRm, Rm: &rmCommand{
 			Paths: cmdArgs.PositionalArgs,
 			Opts: RemoveOptions{
 				Force:         cmdArgs.Contains("-f"),
@@ -428,7 +428,7 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			},
 		}}
 
-	case CommandCommit:
+	case commandCommit:
 		if len(cmdArgs.PositionalArgs) > 0 {
 			return nil
 		}
@@ -439,19 +439,19 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			}
 			message = val
 		}
-		return &Command{Kind: CommandCommit, Commit: &CommitCommand{
+		return &command{Kind: commandCommit, Commit: &commitCommand{
 			Message:    message,
 			AllowEmpty: cmdArgs.Contains("--allow-empty"),
 		}}
 
-	case CommandTag:
+	case commandTag:
 		if len(cmdArgs.PositionalArgs) == 0 {
 			return nil
 		}
 		subCmd := cmdArgs.PositionalArgs[0]
 		switch subCmd {
 		case "list":
-			return &Command{Kind: CommandTag, Tag: &TagCommand{SubKind: TagList}}
+			return &command{Kind: commandTag, Tag: &tagCommand{SubKind: tagList}}
 		case "add":
 			if len(cmdArgs.PositionalArgs) != 2 {
 				return nil
@@ -463,8 +463,8 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 				}
 				message = val
 			}
-			return &Command{Kind: CommandTag, Tag: &TagCommand{
-				SubKind: TagAdd,
+			return &command{Kind: commandTag, Tag: &tagCommand{
+				SubKind: tagAdd,
 				Name:    cmdArgs.PositionalArgs[1],
 				Message: message,
 			}}
@@ -472,8 +472,8 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			if len(cmdArgs.PositionalArgs) != 2 {
 				return nil
 			}
-			return &Command{Kind: CommandTag, Tag: &TagCommand{
-				SubKind: TagRemove,
+			return &command{Kind: commandTag, Tag: &tagCommand{
+				SubKind: tagRemove,
 				Name:    cmdArgs.PositionalArgs[1],
 			}}
 		default:
@@ -481,31 +481,31 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			return nil
 		}
 
-	case CommandStatus:
-		return &Command{Kind: CommandStatus}
+	case commandStatus:
+		return &command{Kind: commandStatus}
 
-	case CommandBranch:
+	case commandBranch:
 		if len(cmdArgs.PositionalArgs) == 0 {
 			return nil
 		}
 		subCmd := cmdArgs.PositionalArgs[0]
 		switch subCmd {
 		case "list":
-			return &Command{Kind: CommandBranch, Branch: &BranchCommand{SubKind: BranchList}}
+			return &command{Kind: commandBranch, Branch: &branchCommand{SubKind: branchList}}
 		case "add":
 			if len(cmdArgs.PositionalArgs) != 2 {
 				return nil
 			}
-			return &Command{Kind: CommandBranch, Branch: &BranchCommand{
-				SubKind: BranchAdd,
+			return &command{Kind: commandBranch, Branch: &branchCommand{
+				SubKind: branchAdd,
 				Name:    cmdArgs.PositionalArgs[1],
 			}}
 		case "rm":
 			if len(cmdArgs.PositionalArgs) != 2 {
 				return nil
 			}
-			return &Command{Kind: CommandBranch, Branch: &BranchCommand{
-				SubKind: BranchRemove,
+			return &command{Kind: commandBranch, Branch: &branchCommand{
+				SubKind: branchRemove,
 				Name:    cmdArgs.PositionalArgs[1],
 			}}
 		default:
@@ -513,50 +513,50 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			return nil
 		}
 
-	case CommandSwitchDir:
+	case commandSwitchDir:
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		target := RefOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1Hash)
+		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1Hash)
 		if target == nil {
 			return nil
 		}
-		return &Command{Kind: CommandSwitchDir, Switch: &SwitchCommand{
+		return &command{Kind: commandSwitchDir, Switch: &switchCommand{
 			Target: *target,
 			Force:  cmdArgs.Contains("-f"),
 		}}
 
-	case CommandReset:
+	case commandReset:
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		target := RefOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1Hash)
+		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1Hash)
 		if target == nil {
 			return nil
 		}
-		return &Command{Kind: CommandReset, Switch: &SwitchCommand{
+		return &command{Kind: commandReset, Switch: &switchCommand{
 			Target: *target,
 			Force:  cmdArgs.Contains("-f"),
 		}}
 
-	case CommandResetDir:
+	case commandResetDir:
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		target := RefOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1Hash)
+		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1Hash)
 		if target == nil {
 			return nil
 		}
-		return &Command{Kind: CommandResetDir, Switch: &SwitchCommand{
+		return &command{Kind: commandResetDir, Switch: &switchCommand{
 			Target: *target,
 			Force:  cmdArgs.Contains("-f"),
 		}}
 
-	case CommandResetAdd:
+	case commandResetAdd:
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		target := RefOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1Hash)
+		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1Hash)
 		if target == nil {
 			return nil
 		}
@@ -564,32 +564,32 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 		if target.IsRef {
 			return nil
 		}
-		return &Command{Kind: CommandResetAdd, ResetAdd: &ResetAddCommand{
+		return &command{Kind: commandResetAdd, ResetAdd: &resetAddCommand{
 			Target: *target,
 		}}
 
-	case CommandRestore:
+	case commandRestore:
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		return &Command{Kind: CommandRestore, Restore: &RestoreCommand{
+		return &command{Kind: commandRestore, Restore: &restoreCommand{
 			Path: cmdArgs.PositionalArgs[0],
 		}}
 
-	case CommandLog:
+	case commandLog:
 		var targets []RefOrOid
 		for _, arg := range cmdArgs.PositionalArgs {
-			target := RefOrOidFromUser(arg, SHA1Hash)
+			target := refOrOidFromUser(arg, SHA1Hash)
 			if target == nil {
 				return nil
 			}
 			targets = append(targets, *target)
 		}
-		return &Command{Kind: CommandLog, Log: &LogCommand{Targets: targets}}
+		return &command{Kind: commandLog, Log: &logCommand{Targets: targets}}
 
-	case CommandMerge, CommandCherryPick:
+	case commandMerge, commandCherryPick:
 		kind := MergeKindFull
-		if *cmdArgs.CommandKind == CommandCherryPick {
+		if *cmdArgs.commandKind == commandCherryPick {
 			kind = MergeKindPick
 		}
 
@@ -597,34 +597,34 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			if len(cmdArgs.PositionalArgs) != 0 {
 				return nil
 			}
-			return &Command{Kind: *cmdArgs.CommandKind, Merge: &MergeCommand{
+			return &command{Kind: *cmdArgs.commandKind, Merge: &mergeCommand{
 				Input: MergeInput{Kind: kind, Action: MergeActionCont},
 			}}
 		} else if cmdArgs.Contains("--abort") {
 			if len(cmdArgs.PositionalArgs) != 0 {
 				return nil
 			}
-			return &Command{Kind: *cmdArgs.CommandKind, Merge: &MergeCommand{
+			return &command{Kind: *cmdArgs.commandKind, Merge: &mergeCommand{
 				Input: MergeInput{Kind: kind, Action: MergeActionAbort},
 			}}
 		} else {
 			if len(cmdArgs.PositionalArgs) != 1 {
 				return nil
 			}
-			source := RefOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1Hash)
+			source := refOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1Hash)
 			if source == nil {
 				return nil
 			}
-			return &Command{Kind: *cmdArgs.CommandKind, Merge: &MergeCommand{
+			return &command{Kind: *cmdArgs.commandKind, Merge: &mergeCommand{
 				Input: MergeInput{Kind: kind, Action: MergeActionNew, Source: *source},
 			}}
 		}
 
-	case CommandReceivePack:
+	case commandReceivePack:
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		return &Command{Kind: CommandReceivePack, ReceivePack: &ReceivePackCommand{
+		return &command{Kind: commandReceivePack, ReceivePack: &receivePackCommand{
 			Dir: cmdArgs.PositionalArgs[0],
 			Options: ReceivePackOptions{
 				SkipConnectivityCheck: cmdArgs.Contains("--skip-connectivity-check"),
@@ -633,11 +633,11 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			},
 		}}
 
-	case CommandUploadPack:
+	case commandUploadPack:
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		return &Command{Kind: CommandUploadPack, UploadPack: &UploadPackCommand{
+		return &command{Kind: commandUploadPack, UploadPack: &uploadPackCommand{
 			Dir: cmdArgs.PositionalArgs[0],
 			Options: UploadPackOptions{
 				AdvertiseRefs: cmdArgs.Contains("--http-backend-info-refs"),
@@ -645,27 +645,27 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			},
 		}}
 
-	case CommandHTTPBackend:
+	case commandHTTPBackend:
 		if len(cmdArgs.PositionalArgs) != 0 {
 			return nil
 		}
-		return &Command{Kind: CommandHTTPBackend}
+		return &command{Kind: commandHTTPBackend}
 
-	case CommandConfig, CommandRemote:
+	case commandConfig, commandRemote:
 		if len(cmdArgs.PositionalArgs) == 0 {
 			return nil
 		}
 		subCmd := cmdArgs.PositionalArgs[0]
-		var cc *ConfigCommand
+		var cc *configCommand
 		switch subCmd {
 		case "list":
-			cc = &ConfigCommand{SubKind: ConfigList}
+			cc = &configCommand{SubKind: configList}
 		case "add":
 			if len(cmdArgs.PositionalArgs) < 3 {
 				return nil
 			}
-			cc = &ConfigCommand{
-				SubKind: ConfigAdd,
+			cc = &configCommand{
+				SubKind: configAdd,
 				Name:    cmdArgs.PositionalArgs[1],
 				Value:   strings.Join(cmdArgs.PositionalArgs[2:], " "),
 			}
@@ -673,65 +673,65 @@ func parseCommand(cmdArgs *CommandArgs) *Command {
 			if len(cmdArgs.PositionalArgs) != 2 {
 				return nil
 			}
-			cc = &ConfigCommand{
-				SubKind: ConfigRemove,
+			cc = &configCommand{
+				SubKind: configRemove,
 				Name:    cmdArgs.PositionalArgs[1],
 			}
 		default:
 			cmdArgs.UnusedArgs[subCmd] = true
 			return nil
 		}
-		if *cmdArgs.CommandKind == CommandConfig {
-			return &Command{Kind: CommandConfig, Config: cc}
+		if *cmdArgs.commandKind == commandConfig {
+			return &command{Kind: commandConfig, Config: cc}
 		}
-		return &Command{Kind: CommandRemote, Remote: cc}
+		return &command{Kind: commandRemote, Remote: cc}
 	}
 	return nil
 }
 
-type DispatchKind int
+type dispatchKind int
 
 const (
-	DispatchInvalidCommand DispatchKind = iota
-	DispatchInvalidArgument
-	DispatchHelp
-	DispatchCLI
+	dispatchInvalidCommand dispatchKind = iota
+	dispatchInvalidArgument
+	dispatchHelp
+	dispatchCLI
 )
 
-type Dispatch struct {
-	Kind        DispatchKind
+type dispatch struct {
+	Kind        dispatchKind
 	InvalidName string
-	InvalidCmd  *CommandKind
-	HelpCmd     *CommandKind
-	Command     *Command
+	InvalidCmd  *commandKind
+	HelpCmd     *commandKind
+	command     *command
 }
 
-func NewDispatch(cmdArgs *CommandArgs) *Dispatch {
+func newDispatch(cmdArgs *commandArgs) *dispatch {
 	showHelp := cmdArgs.Contains("--help")
 	cmdArgs.Contains("--cli") // consume it
 
-	if cmdArgs.CommandKind != nil {
+	if cmdArgs.commandKind != nil {
 		if showHelp {
-			return &Dispatch{Kind: DispatchHelp, HelpCmd: cmdArgs.CommandKind}
+			return &dispatch{Kind: dispatchHelp, HelpCmd: cmdArgs.commandKind}
 		}
 		if cmd := parseCommand(cmdArgs); cmd != nil {
 			// check for unused args
 			for arg := range cmdArgs.UnusedArgs {
-				return &Dispatch{
-					Kind:        DispatchInvalidArgument,
-					InvalidCmd:  cmdArgs.CommandKind,
+				return &dispatch{
+					Kind:        dispatchInvalidArgument,
+					InvalidCmd:  cmdArgs.commandKind,
 					InvalidName: arg,
 				}
 			}
-			return &Dispatch{Kind: DispatchCLI, Command: cmd}
+			return &dispatch{Kind: dispatchCLI, command: cmd}
 		}
-		return &Dispatch{Kind: DispatchHelp, HelpCmd: cmdArgs.CommandKind}
+		return &dispatch{Kind: dispatchHelp, HelpCmd: cmdArgs.commandKind}
 	} else if cmdArgs.CommandName != nil {
-		return &Dispatch{Kind: DispatchInvalidCommand, InvalidName: *cmdArgs.CommandName}
+		return &dispatch{Kind: dispatchInvalidCommand, InvalidName: *cmdArgs.CommandName}
 	} else if showHelp {
-		return &Dispatch{Kind: DispatchHelp}
+		return &dispatch{Kind: dispatchHelp}
 	}
-	return &Dispatch{Kind: DispatchHelp}
+	return &dispatch{Kind: dispatchHelp}
 }
 
 func maxCommandNameLen() int {
@@ -759,7 +759,7 @@ func printAligned(w io.Writer, name, text string, indent int) {
 	}
 }
 
-func PrintHelp(cmdKind *CommandKind, w io.Writer) {
+func printHelp(cmdKind *commandKind, w io.Writer) {
 	indent := maxCommandNameLen() + 2
 
 	if cmdKind != nil {
@@ -776,7 +776,7 @@ func PrintHelp(cmdKind *CommandKind, w io.Writer) {
 		}
 	} else {
 		fmt.Fprintf(w, "help: repomofo <command> [<args>]\n\n")
-		for kind := CommandInit; kind <= CommandHTTPBackend; kind++ {
+		for kind := commandInit; kind <= commandHTTPBackend; kind++ {
 			name := commandNames[kind]
 			printAligned(w, name, commandDescrips[kind], indent)
 		}

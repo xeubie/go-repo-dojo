@@ -96,7 +96,7 @@ func (repo *Repo) status() (*Status, error) {
 	}, nil
 }
 
-func (repo *Repo) addEntries(dirPath, relPath string, idx *Index, seen, untracked, modified map[string]bool) bool {
+func (repo *Repo) addEntries(dirPath, relPath string, idx *index, seen, untracked, modified map[string]bool) bool {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return false
@@ -173,7 +173,7 @@ type RemoveOptions struct {
 }
 
 // indexDiffersFromWorkDir checks if the work dir file differs from the index entry.
-func (repo *Repo) indexDiffersFromWorkDir(entry *IndexEntry, fullPath string) (bool, error) {
+func (repo *Repo) indexDiffersFromWorkDir(entry *indexEntry, fullPath string) (bool, error) {
 	if entry.mode.ObjType() == ModeObjectTypeSymlink {
 		target, err := os.Readlink(fullPath)
 		if err != nil {
@@ -211,12 +211,12 @@ func (repo *Repo) addPaths(paths []string) error {
 	}
 
 	for _, p := range paths {
-		if err := idx.AddOrRemovePath(p, IndexActionAdd, nil); err != nil {
+		if err := idx.AddOrRemovePath(p, indexActionAdd, nil); err != nil {
 			return err
 		}
 	}
 
-	lock, err := NewLockFile(repo.repoPath, "index")
+	lock, err := newLockFile(repo.repoPath, "index")
 	if err != nil {
 		return err
 	}
@@ -243,18 +243,18 @@ func (repo *Repo) unaddPaths(paths []string, opts UnaddOptions) error {
 			return ErrRecursiveOptionRequired
 		}
 
-		if err := idx.AddOrRemovePath(p, IndexActionRm, nil); err != nil {
+		if err := idx.AddOrRemovePath(p, indexActionRm, nil); err != nil {
 			return err
 		}
 
 		// restore entry from HEAD tree if it exists
-		parts := SplitPath(p)
+		parts := splitPath(p)
 		if err := repo.restoreTreeEntryToIndex(idx, parts); err != nil {
 			return err
 		}
 	}
 
-	lock, err := NewLockFile(repo.repoPath, "index")
+	lock, err := newLockFile(repo.repoPath, "index")
 	if err != nil {
 		return err
 	}
@@ -282,7 +282,7 @@ func (repo *Repo) removePaths(paths []string, opts RemoveOptions) error {
 			return ErrRecursiveOptionRequired
 		}
 
-		if err := idx.AddOrRemovePath(p, IndexActionRm, removedPaths); err != nil {
+		if err := idx.AddOrRemovePath(p, indexActionRm, removedPaths); err != nil {
 			return err
 		}
 	}
@@ -351,7 +351,7 @@ func (repo *Repo) removePaths(paths []string, opts RemoveOptions) error {
 		}
 	}
 
-	lock, err := NewLockFile(repo.repoPath, "index")
+	lock, err := newLockFile(repo.repoPath, "index")
 	if err != nil {
 		return err
 	}
@@ -367,7 +367,7 @@ func (repo *Repo) removePaths(paths []string, opts RemoveOptions) error {
 
 // restoreTreeEntryToIndex looks up a path in the HEAD tree and adds it
 // back to the index if found.
-func (repo *Repo) restoreTreeEntryToIndex(idx *Index, pathParts []string) error {
+func (repo *Repo) restoreTreeEntryToIndex(idx *index, pathParts []string) error {
 	oid, mode, err := repo.pathToTreeEntry(pathParts)
 	if err != nil {
 		return nil // not found in HEAD tree, nothing to restore
@@ -378,7 +378,7 @@ func (repo *Repo) restoreTreeEntryToIndex(idx *Index, pathParts []string) error 
 		return err
 	}
 
-	indexPath := JoinPath(pathParts)
+	indexPath := joinPath(pathParts)
 
 	if mode.ObjType() == ModeObjectTypeTree {
 		// it's a directory in the tree — recurse into it
@@ -392,7 +392,7 @@ func (repo *Repo) restoreTreeEntryToIndex(idx *Index, pathParts []string) error 
 	}
 	obj.Close()
 
-	entry := &IndexEntry{
+	entry := &indexEntry{
 		mode:     mode,
 		oid:      oidBytes,
 		fileSize: uint32(obj.Size),
@@ -404,7 +404,7 @@ func (repo *Repo) restoreTreeEntryToIndex(idx *Index, pathParts []string) error 
 }
 
 // restoreTreeDirToIndex recursively adds all entries from a tree object to the index.
-func (repo *Repo) restoreTreeDirToIndex(idx *Index, treeOID string, prefix string) error {
+func (repo *Repo) restoreTreeDirToIndex(idx *index, treeOID string, prefix string) error {
 	obj, err := repo.NewObject(treeOID, true)
 	if err != nil {
 		return err
@@ -416,7 +416,7 @@ func (repo *Repo) restoreTreeDirToIndex(idx *Index, treeOID string, prefix strin
 	}
 
 	for _, te := range obj.Tree.Entries {
-		childPath := JoinPath([]string{prefix, te.Name})
+		childPath := joinPath([]string{prefix, te.Name})
 
 		if te.Mode.ObjType() == ModeObjectTypeTree {
 			childOID := hex.EncodeToString(te.OID)
@@ -431,7 +431,7 @@ func (repo *Repo) restoreTreeDirToIndex(idx *Index, treeOID string, prefix strin
 			}
 			childObj.Close()
 
-			entry := &IndexEntry{
+			entry := &indexEntry{
 				mode:     te.Mode,
 				oid:      te.OID,
 				fileSize: uint32(childObj.Size),
@@ -535,7 +535,7 @@ func (repo *Repo) objectToFile(path string, te TreeEntry) error {
 	}
 }
 
-func treeEntryDiffersFromIndex(te *TreeEntry, ie *IndexEntry) bool {
+func treeEntryDiffersFromIndex(te *TreeEntry, ie *indexEntry) bool {
 	if te == nil && ie == nil {
 		return false
 	}
@@ -547,7 +547,7 @@ func treeEntryDiffersFromIndex(te *TreeEntry, ie *IndexEntry) bool {
 
 // untrackedFile returns true if the given file or one of its descendants (if a dir)
 // isn't tracked by the index, so it cannot be safely removed by checkout.
-func (repo *Repo) untrackedFile(fullPath, relPath string, idx *Index) bool {
+func (repo *Repo) untrackedFile(fullPath, relPath string, idx *index) bool {
 	info, err := os.Lstat(fullPath)
 	if err != nil {
 		return false
@@ -571,10 +571,10 @@ func (repo *Repo) untrackedFile(fullPath, relPath string, idx *Index) bool {
 }
 
 // untrackedParent checks if any parent of the path exists as an untracked file in the work dir.
-func (repo *Repo) untrackedParent(path string, idx *Index) bool {
-	parts := SplitPath(path)
+func (repo *Repo) untrackedParent(path string, idx *index) bool {
+	parts := splitPath(path)
 	for i := 1; i < len(parts); i++ {
-		parentPath := JoinPath(parts[:i])
+		parentPath := joinPath(parts[:i])
 		fullParent := filepath.Join(repo.workPath, parentPath)
 		info, err := os.Lstat(fullParent)
 		if err != nil {
@@ -622,7 +622,7 @@ type SwitchResult struct {
 
 // migrate applies tree diff changes to the index and optionally the work dir.
 // If result is non-nil, conflicts are checked and recorded rather than applied.
-func (repo *Repo) migrate(changes map[string]TreeChange, idx *Index, updateWorkDir bool, result *SwitchResult) error {
+func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkDir bool, result *SwitchResult) error {
 	addFiles := make(map[string]TreeEntry)
 	removeFiles := make(map[string]bool)
 
@@ -642,7 +642,7 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *Index, updateWorkD
 		// check for conflicts
 		if result != nil {
 			entries, inIndex := idx.entries[path]
-			var indexEntry *IndexEntry
+			var indexEntry *indexEntry
 			if inIndex {
 				indexEntry = entries[0]
 			}
@@ -772,7 +772,7 @@ func (repo *Repo) switchDir(input SwitchInput) (*SwitchResult, error) {
 	}
 
 	// write index
-	lock, err := NewLockFile(repo.repoPath, "index")
+	lock, err := newLockFile(repo.repoPath, "index")
 	if err != nil {
 		return nil, err
 	}
@@ -808,7 +808,7 @@ func (r *SwitchResult) hasConflict() bool {
 
 // restore restores a file or directory in the work dir from the HEAD tree.
 func (repo *Repo) restore(path string) error {
-	parts := SplitPath(path)
+	parts := splitPath(path)
 	oidHex, mode, err := repo.pathToTreeEntry(parts)
 	if err != nil {
 		return fmt.Errorf("object not found: %s", path)
@@ -819,5 +819,5 @@ func (repo *Repo) restore(path string) error {
 		return err
 	}
 
-	return repo.objectToFile(JoinPath(parts), TreeEntry{OID: oidBytes, Mode: mode})
+	return repo.objectToFile(joinPath(parts), TreeEntry{OID: oidBytes, Mode: mode})
 }
