@@ -36,7 +36,7 @@ func (repo *Repo) status() (*Status, error) {
 	indexSeen := make(map[string]bool)
 
 	// walk work dir
-	repo.walkWorkDir(repo.workPath, ".", idx, indexSeen, untracked, workDirModified)
+	repo.addEntries(repo.workPath, ".", idx, indexSeen, untracked, workDirModified)
 
 	// entries in index but not seen in work dir are deleted
 	for path, entries := range idx.entries {
@@ -96,7 +96,7 @@ func (repo *Repo) status() (*Status, error) {
 	}, nil
 }
 
-func (repo *Repo) walkWorkDir(dirPath, relPath string, idx *Index, seen, untracked, modified map[string]bool) bool {
+func (repo *Repo) addEntries(dirPath, relPath string, idx *Index, seen, untracked, modified map[string]bool) bool {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return false
@@ -125,7 +125,7 @@ func (repo *Repo) walkWorkDir(dirPath, relPath string, idx *Index, seen, untrack
 		}
 
 		if e.IsDir() {
-			isFile := repo.walkWorkDir(childFull, childRel, idx, seen, untracked, modified)
+			isFile := repo.addEntries(childFull, childRel, idx, seen, untracked, modified)
 			containsFile = containsFile || isFile
 			if isFile && !isTrackedDir {
 				break
@@ -545,8 +545,33 @@ func treeEntryDiffersFromIndex(te *TreeEntry, ie *IndexEntry) bool {
 	return te.Mode != ie.mode || !bytes.Equal(te.OID, ie.oid)
 }
 
-// hasUntrackedParent checks if any parent of the path exists as an untracked file in the work dir.
-func (repo *Repo) hasUntrackedParent(path string, idx *Index) bool {
+// untrackedFile returns true if the given file or one of its descendants (if a dir)
+// isn't tracked by the index, so it cannot be safely removed by checkout.
+func (repo *Repo) untrackedFile(fullPath, relPath string, idx *Index) bool {
+	info, err := os.Lstat(fullPath)
+	if err != nil {
+		return false
+	}
+	if !info.IsDir() {
+		_, ok := idx.entries[relPath]
+		return !ok
+	}
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		childFull := filepath.Join(fullPath, e.Name())
+		childRel := relPath + "/" + e.Name()
+		if repo.untrackedFile(childFull, childRel, idx) {
+			return true
+		}
+	}
+	return false
+}
+
+// untrackedParent checks if any parent of the path exists as an untracked file in the work dir.
+func (repo *Repo) untrackedParent(path string, idx *Index) bool {
 	parts := SplitPath(path)
 	for i := 1; i < len(parts); i++ {
 		parentPath := JoinPath(parts[:i])
@@ -565,32 +590,6 @@ func (repo *Repo) hasUntrackedParent(path string, idx *Index) bool {
 	return false
 }
 
-// hasUntrackedDescendant checks if a directory has any file that is not in the index.
-func (repo *Repo) hasUntrackedDescendant(dirPath string, idx *Index) bool {
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return false
-	}
-	for _, e := range entries {
-		fullPath := filepath.Join(dirPath, e.Name())
-		relPath, err := filepath.Rel(repo.workPath, fullPath)
-		if err != nil {
-			continue
-		}
-		relPath = filepath.ToSlash(relPath)
-
-		if e.IsDir() {
-			if repo.hasUntrackedDescendant(fullPath, idx) {
-				return true
-			}
-		} else {
-			if _, ok := idx.entries[relPath]; !ok {
-				return true
-			}
-		}
-	}
-	return false
-}
 
 // SwitchKind differentiates between switch and reset.
 type SwitchKind int
@@ -659,7 +658,7 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *Index, updateWorkD
 			fullPath := filepath.Join(repo.workPath, path)
 			info, statErr := os.Lstat(fullPath)
 			if statErr != nil {
-				if repo.hasUntrackedParent(path, idx) {
+				if repo.untrackedParent(path, idx) {
 					if indexEntry != nil {
 						result.Conflict.StaleFiles = append(result.Conflict.StaleFiles, path)
 					} else if change.New != nil {
@@ -672,8 +671,7 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *Index, updateWorkD
 			}
 
 			if info.IsDir() {
-				hasUntracked := repo.hasUntrackedDescendant(fullPath, idx)
-				if hasUntracked {
+				if repo.untrackedFile(fullPath, path, idx) {
 					if indexEntry != nil {
 						result.Conflict.StaleFiles = append(result.Conflict.StaleFiles, path)
 					} else {
