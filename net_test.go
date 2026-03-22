@@ -34,7 +34,6 @@ func runGitOnServer(t *testing.T, server testServer, dir string, args ...string)
 	}
 }
 
-
 // --- HTTP server ---
 
 type httpServer struct {
@@ -247,7 +246,6 @@ func runGitWithSSH(t *testing.T, dir string, sshArg string, args ...string) {
 		t.Fatalf("git %s failed: %v", strings.Join(fullArgs, " "), err)
 	}
 }
-
 
 func writeTestFile(t *testing.T, dir, name, content string) {
 	t.Helper()

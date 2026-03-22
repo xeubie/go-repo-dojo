@@ -45,21 +45,21 @@ type allowUor struct {
 
 type uploadPackSession struct {
 	// config
-	allowUor           allowUor
-	allowFilter        bool
-	allowRefInWant     bool
-	allowSidebandAll   bool
-	allowPackfileURIs  bool
+	allowUor          allowUor
+	allowFilter       bool
+	allowRefInWant    bool
+	allowSidebandAll  bool
+	allowPackfileURIs bool
 
 	// capabilities negotiated with client
-	multiAck                multiAck
-	useSideband             bool
-	writerUseSideband       bool
-	noDone                  bool
-	isStateless             bool
-	filterCapRequested      bool
-	sentCapabilities        bool
-	symrefs                 []symref
+	multiAck           multiAck
+	useSideband        bool
+	writerUseSideband  bool
+	noDone             bool
+	isStateless        bool
+	filterCapRequested bool
+	sentCapabilities   bool
+	symrefs            []symref
 
 	// shallow/deepen state
 	depth          int

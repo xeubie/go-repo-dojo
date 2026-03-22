@@ -824,4 +824,3 @@ func (repo *Repo) restore(path string) error {
 
 	return repo.objectToFile(JoinPath(parts), TreeEntry{OID: oidBytes, Mode: mode})
 }
-

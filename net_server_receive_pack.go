@@ -9,10 +9,10 @@ import (
 )
 
 type ReceivePackOptions struct {
-	ProtocolVersion      int // 0, 1, or 2
+	ProtocolVersion       int // 0, 1, or 2
 	SkipConnectivityCheck bool
-	AdvertiseRefs        bool
-	IsStateless          bool
+	AdvertiseRefs         bool
+	IsStateless           bool
 }
 
 type refUpdate struct {
@@ -58,19 +58,19 @@ func parseBoolConfig(value string) bool {
 
 type receivePack struct {
 	// config
-	preferOfsDelta       bool
-	isBare               bool
-	denyDeletes          bool
-	denyNonFastForwards  bool
-	denyCurrentBranch    denyPolicy
-	denyDeleteCurrent    denyPolicy
+	preferOfsDelta      bool
+	isBare              bool
+	denyDeletes         bool
+	denyNonFastForwards bool
+	denyCurrentBranch   denyPolicy
+	denyDeleteCurrent   denyPolicy
 
 	// protocol state
-	sentCapabilities     bool
-	useSideband          bool
-	reportStatus         bool
-	reportStatusV2       bool
-	headName             string // empty means no HEAD
+	sentCapabilities bool
+	useSideband      bool
+	reportStatus     bool
+	reportStatusV2   bool
+	headName         string // empty means no HEAD
 }
 
 func newReceivePack() *receivePack {

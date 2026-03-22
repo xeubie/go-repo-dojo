@@ -57,7 +57,6 @@ type ObjectHeader struct {
 	Size uint64
 }
 
-
 // parseObjectHeader parses a git object header from decompressed data.
 func parseObjectHeader(data []byte) (ObjectHeader, int, error) {
 	spaceIdx := bytes.IndexByte(data, ' ')
@@ -516,7 +515,6 @@ type ObjectStore interface {
 
 	// WriteObject writes an object and returns its raw OID hash bytes.
 	WriteObject(header ObjectHeader, reader io.Reader) ([]byte, error)
-
 }
 
 func (repo *Repo) NewObjectReader(oidHex string) (ObjectReader, error) {
@@ -754,9 +752,9 @@ const (
 )
 
 type ObjectIteratorOptions struct {
-	Kind       ObjectIterKind
-	MaxDepth   *int
-	Full bool // if true, Next returns parsed objects; if false, returns raw objects
+	Kind     ObjectIterKind
+	MaxDepth *int
+	Full     bool // if true, Next returns parsed objects; if false, returns raw objects
 }
 
 type oidQueueEntry struct {

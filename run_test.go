@@ -1627,7 +1627,6 @@ func TestRun(t *testing.T) {
 	}
 }
 
-
 func countIndexEntries(idx *Index) int {
 	count := 0
 	for _, entries := range idx.entries {
