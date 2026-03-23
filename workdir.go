@@ -17,14 +17,14 @@ type MergeConflictStatus struct {
 
 // Status represents the current status of the working directory and index.
 type Status struct {
-	Untracked            map[string]bool
-	WorkDirModified      map[string]bool
-	WorkDirDeleted       map[string]bool
-	IndexAdded           map[string]bool
-	IndexModified        map[string]bool
-	IndexDeleted         map[string]bool
-	UnresolvedConflicts  map[string]MergeConflictStatus
-	ResolvedConflicts    map[string]TreeEntry
+	Untracked           map[string]bool
+	WorkDirModified     map[string]bool
+	WorkDirDeleted      map[string]bool
+	IndexAdded          map[string]bool
+	IndexModified       map[string]bool
+	IndexDeleted        map[string]bool
+	UnresolvedConflicts map[string]MergeConflictStatus
+	ResolvedConflicts   map[string]TreeEntry
 }
 
 func (repo *Repo) status() (*Status, error) {
@@ -761,12 +761,12 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkD
 		// ignore non-conflict entries
 		if entries[0] != nil {
 			continue
-		// we can't switch if there is an unresolved merge conflict
+			// we can't switch if there is an unresolved merge conflict
 		} else if result != nil {
 			result.Conflict.StaleFiles = append(result.Conflict.StaleFiles, path)
-		// if we are using -f, and the conflicting file isn't being removed,
-		// just add it so the index is updated (making it non-conflicting)
-		// and the work dir is (optionally) updated
+			// if we are using -f, and the conflicting file isn't being removed,
+			// just add it so the index is updated (making it non-conflicting)
+			// and the work dir is (optionally) updated
 		} else if _, inAddFiles := addFiles[path]; !removeFiles[path] && !inAddFiles {
 			conflictEntry := entries[2]
 			if conflictEntry == nil {

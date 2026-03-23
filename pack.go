@@ -404,9 +404,9 @@ type PackObjectReader struct {
 	// basic
 	basicHeader ObjectHeader
 	// delta init
-	deltaRefKind   deltaRefKind
-	deltaOfsPos    uint64
-	deltaRefOID Hash
+	deltaRefKind deltaRefKind
+	deltaOfsPos  uint64
+	deltaRefOID  Hash
 	// delta state (set after initDelta)
 	deltaState *deltaState
 }

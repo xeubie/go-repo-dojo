@@ -91,4 +91,3 @@ func (repo *Repo) listBranches() (*RefIterator, error) {
 	headsDir := filepath.Join(repo.repoPath, "refs", "heads")
 	return newRefIterator(headsDir, RefHead)
 }
-

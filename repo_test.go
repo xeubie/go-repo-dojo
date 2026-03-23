@@ -496,8 +496,7 @@ func TestMergeSideBranch(t *testing.T) {
 	}
 }
 
-func initTestRepo(t *testing.T) *Repo {
-	t.Helper()
+func TestMergeConflictSameFile(t *testing.T) {
 	tempDir := t.TempDir()
 	workPath := filepath.Join(tempDir, "repo")
 	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
@@ -508,39 +507,6 @@ func initTestRepo(t *testing.T) *Repo {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return repo
-}
-
-func switchBranch(t *testing.T, repo *Repo, name string) {
-	t.Helper()
-	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: name}}, UpdateWorkDir: true}); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func mergeFoo(t *testing.T, repo *Repo) MergeData {
-	t.Helper()
-	data, err := repo.Merge(MergeInput{
-		Kind:   MergeKindFull,
-		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return data
-}
-
-func readWorkFile(t *testing.T, repo *Repo, path string) string {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(repo.workPath, path))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(data)
-}
-
-func TestMergeConflictSameFile(t *testing.T) {
-	repo := initTestRepo(t)
 
 	// A --- B --- D [master]
 	//  \         /
@@ -558,20 +524,34 @@ func TestMergeConflictSameFile(t *testing.T) {
 	if _, err := repo.Commit(CommitMetadata{Message: "b"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "f.txt", "a\ny\nc")
 	if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
-	result := mergeFoo(t, repo)
+	result, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// verify f.txt has conflict markers
-	content := readWorkFile(t, repo, "f.txt")
+	contentBytes, err := os.ReadFile(filepath.Join(repo.workPath, "f.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(contentBytes)
 	if !strings.Contains(content, "<<<<<<< target (master)") {
 		t.Fatalf("expected conflict markers in f.txt, got: %s", content)
 	}
@@ -580,7 +560,7 @@ func TestMergeConflictSameFile(t *testing.T) {
 	}
 
 	// can't merge again with an unresolved merge
-	_, err := repo.Merge(MergeInput{
+	_, err = repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
 		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
@@ -605,14 +585,29 @@ func TestMergeConflictSameFile(t *testing.T) {
 	}
 
 	// merging foo again does nothing
-	result3 := mergeFoo(t, repo)
+	result3, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
 func TestMergeConflictSameFileEmptyBase(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// A --- B --- D [master]
 	//  \         /
@@ -630,26 +625,40 @@ func TestMergeConflictSameFileEmptyBase(t *testing.T) {
 	if _, err := repo.Commit(CommitMetadata{Message: "b"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "f.txt", "a\ny\nc\n")
 	if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
-	result := mergeFoo(t, repo)
+	result, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// verify f.txt has conflict markers
-	content := readWorkFile(t, repo, "f.txt")
+	contentBytes, err := os.ReadFile(filepath.Join(repo.workPath, "f.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(contentBytes)
 	if !strings.Contains(content, "<<<<<<< target (master)") {
 		t.Fatalf("expected conflict markers in f.txt, got: %s", content)
 	}
 
 	// can't merge again with an unresolved merge
-	_, err := repo.Merge(MergeInput{
+	_, err = repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
 		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
@@ -674,14 +683,29 @@ func TestMergeConflictSameFileEmptyBase(t *testing.T) {
 	}
 
 	// merging foo again does nothing
-	result3 := mergeFoo(t, repo)
+	result3, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
 func TestMergeConflictSameFileAutoresolved(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// A --- B --- D [master]
 	//  \         /
@@ -699,33 +723,62 @@ func TestMergeConflictSameFileAutoresolved(t *testing.T) {
 	if _, err := repo.Commit(CommitMetadata{Message: "b"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "f.txt", "a\nb\ny")
 	if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
-	result := mergeFoo(t, repo)
+	result, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success (autoresolved), got %v", result)
 	}
 
 	// verify f.txt has been autoresolved
-	content := readWorkFile(t, repo, "f.txt")
+	contentBytes, err := os.ReadFile(filepath.Join(repo.workPath, "f.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(contentBytes)
 	if content != "x\nb\ny" {
 		t.Fatalf("expected autoresolved content, got %q", content)
 	}
 
 	// merging foo again does nothing
-	result2 := mergeFoo(t, repo)
+	result2, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result2.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result2)
 	}
 }
 
 func TestMergeConflictSameFileAutoresolvedNeighboringLines(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// A --- B --- D [master]
 	//  \         /
@@ -743,14 +796,24 @@ func TestMergeConflictSameFileAutoresolvedNeighboringLines(t *testing.T) {
 	if _, err := repo.Commit(CommitMetadata{Message: "b"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "f.txt", "a\nf\nc\nd")
 	if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
-	result := mergeFoo(t, repo)
+	result, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	// for git backend (diff3), neighboring line changes produce a conflict
 	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
@@ -758,7 +821,16 @@ func TestMergeConflictSameFileAutoresolvedNeighboringLines(t *testing.T) {
 }
 
 func TestMergeConflictModifyDelete(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// target modifies, source deletes
 
@@ -773,22 +845,32 @@ func TestMergeConflictModifyDelete(t *testing.T) {
 	if _, err := repo.Commit(CommitMetadata{Message: "b"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	if err := repo.Remove([]string{"f.txt"}, RemoveOptions{UpdateWorkDir: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
-	result := mergeFoo(t, repo)
+	result, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// can't merge again with an unresolved merge
-	_, err := repo.Merge(MergeInput{
+	_, err = repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
 		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
@@ -815,14 +897,29 @@ func TestMergeConflictModifyDelete(t *testing.T) {
 	}
 
 	// merging foo again does nothing
-	result3 := mergeFoo(t, repo)
+	result3, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
 func TestMergeConflictDeleteModify(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// target deletes, source modifies
 
@@ -839,20 +936,30 @@ func TestMergeConflictDeleteModify(t *testing.T) {
 	if _, err := repo.Commit(CommitMetadata{Message: "b"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "f.txt", "2")
 	if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
-	result := mergeFoo(t, repo)
+	result, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// can't merge again with an unresolved merge
-	_, err := repo.Merge(MergeInput{
+	_, err = repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
 		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
@@ -879,14 +986,29 @@ func TestMergeConflictDeleteModify(t *testing.T) {
 	}
 
 	// merging foo again does nothing
-	result3 := mergeFoo(t, repo)
+	result3, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
 func TestMergeConflictFileDir(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// target has file f.txt, source has dir f.txt/
 
@@ -901,14 +1023,24 @@ func TestMergeConflictFileDir(t *testing.T) {
 	if _, err := repo.Commit(CommitMetadata{Message: "b"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "f.txt/g.txt", "hi")
 	if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
-	result := mergeFoo(t, repo)
+	result, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
@@ -919,7 +1051,7 @@ func TestMergeConflictFileDir(t *testing.T) {
 	}
 
 	// can't merge again with an unresolved merge
-	_, err := repo.Merge(MergeInput{
+	_, err = repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
 		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
@@ -940,14 +1072,29 @@ func TestMergeConflictFileDir(t *testing.T) {
 	}
 
 	// merging foo again does nothing
-	result3 := mergeFoo(t, repo)
+	result3, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
 func TestMergeConflictDirFile(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// target has dir f.txt/, source has file f.txt
 
@@ -962,14 +1109,24 @@ func TestMergeConflictDirFile(t *testing.T) {
 	if _, err := repo.Commit(CommitMetadata{Message: "b"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "f.txt", "hi")
 	if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
-	result := mergeFoo(t, repo)
+	result, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
@@ -980,7 +1137,7 @@ func TestMergeConflictDirFile(t *testing.T) {
 	}
 
 	// can't merge again with an unresolved merge
-	_, err := repo.Merge(MergeInput{
+	_, err = repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
 		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
@@ -1001,14 +1158,29 @@ func TestMergeConflictDirFile(t *testing.T) {
 	}
 
 	// merging foo again does nothing
-	result3 := mergeFoo(t, repo)
+	result3, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
 func TestMergeConflictBinary(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// A --- B --------- D [master]
 	//  \               /
@@ -1033,7 +1205,9 @@ func TestMergeConflictBinary(t *testing.T) {
 	if err := repo.AddBranch(AddBranchInput{Name: "foo"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
 	bin[0] = 1
 	addFile(t, repo, "bin", string(bin[:]))
@@ -1041,7 +1215,9 @@ func TestMergeConflictBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
 	bin[0] = 2
 	addFile(t, repo, "bin", string(bin[:]))
@@ -1049,14 +1225,24 @@ func TestMergeConflictBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := mergeFoo(t, repo)
+	result, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// verify no lines are longer than one byte
 	// so we know that conflict markers haven't been added
-	content := readWorkFile(t, repo, "bin")
+	contentBytes, err := os.ReadFile(filepath.Join(repo.workPath, "bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(contentBytes)
 	for _, line := range strings.Split(content, "\n") {
 		if len(line) > 1 {
 			t.Fatalf("expected no lines longer than 1 byte (no conflict markers in binary), got line of length %d", len(line))
@@ -1076,7 +1262,13 @@ func TestMergeConflictBinary(t *testing.T) {
 	}
 
 	// merging foo again does nothing
-	result3 := mergeFoo(t, repo)
+	result3, err := repo.Merge(MergeInput{
+		Kind:   MergeKindFull,
+		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
@@ -1087,7 +1279,16 @@ func TestMergeConflictBinary(t *testing.T) {
 func TestMergeConflictShuffle(t *testing.T) {
 	// from https://pijul.org/manual/why_pijul.html
 	t.Run("simple", func(t *testing.T) {
-		repo := initTestRepo(t)
+		tempDir := t.TempDir()
+		workPath := filepath.Join(tempDir, "repo")
+		opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+		if _, err := InitRepo(workPath, opts); err != nil {
+			t.Fatal(err)
+		}
+		repo, err := OpenRepo(workPath, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// A --- B --- C --- E [master]
 		//  \               /
@@ -1109,27 +1310,47 @@ func TestMergeConflictShuffle(t *testing.T) {
 		if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 			t.Fatal(err)
 		}
-		switchBranch(t, repo, "foo")
+		if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+			t.Fatal(err)
+		}
 		addFile(t, repo, "f.txt", "a\nx\nb")
 		if _, err := repo.Commit(CommitMetadata{Message: "d"}); err != nil {
 			t.Fatal(err)
 		}
-		switchBranch(t, repo, "master")
+		if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+			t.Fatal(err)
+		}
 
-		result := mergeFoo(t, repo)
+		result, err := repo.Merge(MergeInput{
+			Kind:   MergeKindFull,
+			Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 		if _, ok := result.Result.(MergeResultSuccess); !ok {
 			t.Fatalf("expected success, got %v", result)
 		}
 
 		// git shuffles lines
-		content := readWorkFile(t, repo, "f.txt")
+		contentBytes, err := os.ReadFile(filepath.Join(repo.workPath, "f.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		content := string(contentBytes)
 		expected := "a\nx\nb\ng\na\nb"
 		if content != expected {
 			t.Fatalf("expected %q, got %q", expected, content)
 		}
 
 		// merging foo again does nothing
-		result2 := mergeFoo(t, repo)
+		result2, err := repo.Merge(MergeInput{
+			Kind:   MergeKindFull,
+			Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 		if _, ok := result2.Result.(MergeResultNothing); !ok {
 			t.Fatalf("expected nothing, got %v", result2)
 		}
@@ -1137,7 +1358,16 @@ func TestMergeConflictShuffle(t *testing.T) {
 
 	// from https://tahoe-lafs.org/~zooko/badmerge/concrete-good-semantics.html
 	t.Run("concrete", func(t *testing.T) {
-		repo := initTestRepo(t)
+		tempDir := t.TempDir()
+		workPath := filepath.Join(tempDir, "repo")
+		opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+		if _, err := InitRepo(workPath, opts); err != nil {
+			t.Fatal(err)
+		}
+		repo, err := OpenRepo(workPath, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// A --- B --- C --- E [master]
 		//  \               /
@@ -1215,17 +1445,30 @@ int slow_square(int x) {
 		if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 			t.Fatal(err)
 		}
-		switchBranch(t, repo, "foo")
+		if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+			t.Fatal(err)
+		}
 		addFile(t, repo, "f.txt", commitD)
 		if _, err := repo.Commit(CommitMetadata{Message: "d"}); err != nil {
 			t.Fatal(err)
 		}
-		switchBranch(t, repo, "master")
+		if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+			t.Fatal(err)
+		}
 
-		mergeFoo(t, repo)
+		if _, err := repo.Merge(MergeInput{
+			Kind:   MergeKindFull,
+			Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
+		}); err != nil {
+			t.Fatal(err)
+		}
 
 		// git backend expected result
-		content := readWorkFile(t, repo, "f.txt")
+		contentBytes, err := os.ReadFile(filepath.Join(repo.workPath, "f.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		content := string(contentBytes)
 		expected := `int square(int x) {
   int y = 0;
   /* Update y to equal the result. */
@@ -1257,7 +1500,16 @@ int slow_square(int x) {
 }
 
 func TestCherryPick(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// A --- B ------------ D' [master]
 	//        \
@@ -1275,7 +1527,9 @@ func TestCherryPick(t *testing.T) {
 	if err := repo.AddBranch(AddBranchInput{Name: "foo"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
 	// commit c modifies a different file, so it shouldn't cause a conflict
 	addFile(t, repo, "stuff.md", "c")
@@ -1291,7 +1545,9 @@ func TestCherryPick(t *testing.T) {
 	if _, err := repo.Commit(CommitMetadata{Message: "e"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := repo.Merge(MergeInput{
 		Kind:   MergeKindPick,
@@ -1312,7 +1568,7 @@ func TestCherryPick(t *testing.T) {
 	// if we try cherry-picking the same commit again, it succeeds again
 	result2, err := repo.Merge(MergeInput{
 		Kind:     MergeKindPick,
-		Action: MergeActionNew{Source: OIDValue{OID: commitD}},
+		Action:   MergeActionNew{Source: OIDValue{OID: commitD}},
 		Metadata: &CommitMetadata{Message: "d", AllowEmpty: true},
 	})
 	if err != nil {
@@ -1324,7 +1580,16 @@ func TestCherryPick(t *testing.T) {
 }
 
 func TestCherryPickConflict(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// A --- B ------------ D' [master]
 	//        \
@@ -1342,7 +1607,9 @@ func TestCherryPickConflict(t *testing.T) {
 	if err := repo.AddBranch(AddBranchInput{Name: "foo"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "readme.md", "c")
 	if _, err := repo.Commit(CommitMetadata{Message: "c"}); err != nil {
 		t.Fatal(err)
@@ -1356,7 +1623,9 @@ func TestCherryPickConflict(t *testing.T) {
 	if _, err := repo.Commit(CommitMetadata{Message: "e"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := repo.Merge(MergeInput{
 		Kind:   MergeKindPick,
@@ -1370,7 +1639,11 @@ func TestCherryPickConflict(t *testing.T) {
 	}
 
 	// verify readme.md has conflict markers
-	content := readWorkFile(t, repo, "readme.md")
+	contentBytes, err := os.ReadFile(filepath.Join(repo.workPath, "readme.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(contentBytes)
 	if !strings.Contains(content, "<<<<<<< target (master)") {
 		t.Fatalf("expected conflict markers, got: %s", content)
 	}
@@ -1413,7 +1686,16 @@ func TestCherryPickConflict(t *testing.T) {
 }
 
 func TestLog(t *testing.T) {
-	repo := initTestRepo(t)
+	tempDir := t.TempDir()
+	workPath := filepath.Join(tempDir, "repo")
+	opts := RepoOpts{Hash: SHA1HashKind, IsTest: true}
+	if _, err := InitRepo(workPath, opts); err != nil {
+		t.Fatal(err)
+	}
+	repo, err := OpenRepo(workPath, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// A --- B --- C --------- G --- H [master]
 	//        \               /
@@ -1433,19 +1715,25 @@ func TestLog(t *testing.T) {
 	if err := repo.AddBranch(AddBranchInput{Name: "foo"}); err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "foo.md", "d")
 	commitD, err := repo.Commit(CommitMetadata{Message: "d"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "master.md", "c")
 	commitC, err := repo.Commit(CommitMetadata{Message: "c"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "foo")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 	addFile(t, repo, "foo.md", "e")
 	commitE, err := repo.Commit(CommitMetadata{Message: "e"})
 	if err != nil {
@@ -1456,7 +1744,9 @@ func TestLog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	switchBranch(t, repo, "master")
+	if _, err := repo.Switch(SwitchInput{Kind: SwitchKindSwitch, Target: RefValue{Ref: Ref{Kind: RefHead, Name: "master"}}, UpdateWorkDir: true}); err != nil {
+		t.Fatal(err)
+	}
 
 	mergeResult, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
