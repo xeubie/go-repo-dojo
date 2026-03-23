@@ -819,11 +819,11 @@ func uploadPack(w io.Writer, repo *Repo, options UploadPackOptions, r io.Reader)
 		if err != nil {
 			return err
 		}
-		switch result.kind {
+		switch v := result.(type) {
 		case pktLineEOF:
 			// no negotiation needed
 		case pktLineData:
-			if err := up.getCommonCommits(repo, w, r, &haveObj, &wantObj, result.data); err != nil {
+			if err := up.getCommonCommits(repo, w, r, &haveObj, &wantObj, v.data); err != nil {
 				return err
 			}
 			if err := writePack(repo, w, wantObj); err != nil {
@@ -1032,14 +1032,14 @@ func processV2Request(w io.Writer, repo *Repo, cfg *v2Config, r io.Reader) (bool
 		if err != nil {
 			return false, err
 		}
-		switch result.kind {
+		switch v := result.(type) {
 		case pktLineEOF:
 			if !seenCapOrCmd {
 				return true, nil
 			}
 			return false, fmt.Errorf("unexpected EOF")
 		case pktLineData:
-			line := string(result.data)
+			line := string(v.data)
 			if strings.HasPrefix(line, "command=") {
 				if command != nil {
 					return false, fmt.Errorf("duplicate command")
@@ -1096,7 +1096,7 @@ func processV2Request(w io.Writer, repo *Repo, cfg *v2Config, r io.Reader) (bool
 			if err != nil {
 				return false, err
 			}
-			if result.kind == pktLineFlush {
+			if _, ok := result.(pktLineFlush); ok {
 				break
 			}
 		}
@@ -1189,13 +1189,14 @@ func lsRefs(w io.Writer, repo *Repo, r io.Reader) error {
 		if err != nil {
 			return err
 		}
-		if result.kind == pktLineFlush {
+		if _, ok := result.(pktLineFlush); ok {
 			break
 		}
-		if result.kind != pktLineData {
+		data, ok := result.(pktLineData)
+		if !ok {
 			return fmt.Errorf("unexpected pkt-line in ls-refs")
 		}
-		arg := string(result.data)
+		arg := string(data.data)
 		switch {
 		case arg == "peel":
 			shouldPeel = true
@@ -1340,13 +1341,14 @@ func objectInfo(w io.Writer, repo *Repo, r io.Reader) error {
 		if err != nil {
 			return err
 		}
-		if result.kind == pktLineFlush {
+		if _, ok := result.(pktLineFlush); ok {
 			break
 		}
-		if result.kind != pktLineData {
+		data, ok := result.(pktLineData)
+		if !ok {
 			return fmt.Errorf("unexpected pkt-line in object-info")
 		}
-		arg := string(result.data)
+		arg := string(data.data)
 		switch {
 		case arg == "size":
 			wantSize = true
@@ -1419,13 +1421,14 @@ func uploadPackV2(w io.Writer, repo *Repo, r io.Reader) error {
 		if err != nil {
 			return err
 		}
-		if result.kind == pktLineFlush {
+		if _, ok := result.(pktLineFlush); ok {
 			break
 		}
-		if result.kind != pktLineData {
+		data, ok := result.(pktLineData)
+		if !ok {
 			return fmt.Errorf("unexpected pkt-line")
 		}
-		arg := string(result.data)
+		arg := string(data.data)
 
 		if strings.HasPrefix(arg, "want ") {
 			wantArg := arg[5:]

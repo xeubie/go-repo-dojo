@@ -92,62 +92,66 @@ func readPktLine(r io.Reader) ([]byte, error) {
 	return buf, nil
 }
 
-type pktLineResultKind int
+type pktLineResult interface {
+	pktLineResult()
+}
 
-const (
-	pktLineData pktLineResultKind = iota
-	pktLineFlush
-	pktLineDelim
-	pktLineResponseEnd
-	pktLineEOF
-)
-
-type pktLineResult struct {
-	kind pktLineResultKind
+type pktLineData struct {
 	data []byte
 }
+
+type pktLineFlush struct{}
+type pktLineDelim struct{}
+type pktLineResponseEnd struct{}
+type pktLineEOF struct{}
+
+func (pktLineData) pktLineResult()        {}
+func (pktLineFlush) pktLineResult()       {}
+func (pktLineDelim) pktLineResult()       {}
+func (pktLineResponseEnd) pktLineResult() {}
+func (pktLineEOF) pktLineResult()         {}
 
 // readPktLineEx reads a pkt-line and distinguishes flush/delim/response_end/eof/data.
 func readPktLineEx(r io.Reader) (pktLineResult, error) {
 	var header [pktLenSize]byte
 	if _, err := io.ReadFull(r, header[:]); err != nil {
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			return pktLineResult{kind: pktLineEOF}, nil
+			return pktLineEOF{}, nil
 		}
-		return pktLineResult{}, err
+		return nil, err
 	}
 
 	dst := make([]byte, 2)
 	_, err := hex.Decode(dst, header[:])
 	if err != nil {
-		return pktLineResult{}, fmt.Errorf("invalid pkt-line header: %w", err)
+		return nil, fmt.Errorf("invalid pkt-line header: %w", err)
 	}
 	length := int(dst[0])<<8 | int(dst[1])
 
 	switch length {
 	case 0:
-		return pktLineResult{kind: pktLineFlush}, nil
+		return pktLineFlush{}, nil
 	case 1:
-		return pktLineResult{kind: pktLineDelim}, nil
+		return pktLineDelim{}, nil
 	case 2:
-		return pktLineResult{kind: pktLineResponseEnd}, nil
+		return pktLineResponseEnd{}, nil
 	}
 
 	if length < pktLenSize {
-		return pktLineResult{}, fmt.Errorf("invalid pkt-line length: %d", length)
+		return nil, fmt.Errorf("invalid pkt-line length: %d", length)
 	}
 
 	dataLen := length - pktLenSize
 	buf := make([]byte, dataLen)
 	if _, err := io.ReadFull(r, buf); err != nil {
-		return pktLineResult{}, err
+		return nil, err
 	}
 
 	// chomp trailing newline
 	if dataLen > 0 && buf[dataLen-1] == '\n' {
 		buf = buf[:dataLen-1]
 	}
-	return pktLineResult{kind: pktLineData, data: buf}, nil
+	return pktLineData{data: buf}, nil
 }
 
 func sendSideband(w io.Writer, band byte, data []byte) error {
