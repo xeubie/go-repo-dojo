@@ -304,7 +304,7 @@ func TestMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mergeSuccess, ok := mergeResult.(MergeResultSuccess)
+	mergeSuccess, ok := mergeResult.Result.(MergeResultSuccess)
 	if !ok {
 		t.Fatalf("expected success, got %v", mergeResult)
 	}
@@ -344,7 +344,7 @@ func TestMerge(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, ok := mergeResult.(MergeResultNothing); !ok {
+		if _, ok := mergeResult.Result.(MergeResultNothing); !ok {
 			t.Fatalf("expected nothing, got %v", mergeResult)
 		}
 	}
@@ -361,7 +361,7 @@ func TestMerge(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, ok := mergeResult.(MergeResultFastForward); !ok {
+		if _, ok := mergeResult.Result.(MergeResultFastForward); !ok {
 			t.Fatalf("expected fast_forward, got %v", mergeResult)
 		}
 
@@ -457,7 +457,7 @@ func TestMergeSideBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := mergeResult.(MergeResultSuccess); !ok {
+	if _, ok := mergeResult.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", mergeResult)
 	}
 
@@ -518,16 +518,16 @@ func switchBranch(t *testing.T, repo *Repo, name string) {
 	}
 }
 
-func mergeFoo(t *testing.T, repo *Repo) MergeResult {
+func mergeFoo(t *testing.T, repo *Repo) MergeData {
 	t.Helper()
-	result, err := repo.Merge(MergeInput{
+	data, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
 		Action: MergeActionNew{Source: RefValue{Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return result
+	return data
 }
 
 func readWorkFile(t *testing.T, repo *Repo, path string) string {
@@ -566,7 +566,7 @@ func TestMergeConflictSameFile(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if _, ok := result.(MergeResultConflict); !ok {
+	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
@@ -600,13 +600,13 @@ func TestMergeConflictSameFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result2.(MergeResultSuccess); !ok {
+	if _, ok := result2.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if _, ok := result3.(MergeResultNothing); !ok {
+	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
@@ -638,7 +638,7 @@ func TestMergeConflictSameFileEmptyBase(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if _, ok := result.(MergeResultConflict); !ok {
+	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
@@ -669,13 +669,13 @@ func TestMergeConflictSameFileEmptyBase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result2.(MergeResultSuccess); !ok {
+	if _, ok := result2.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if _, ok := result3.(MergeResultNothing); !ok {
+	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
@@ -707,7 +707,7 @@ func TestMergeConflictSameFileAutoresolved(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if _, ok := result.(MergeResultSuccess); !ok {
+	if _, ok := result.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success (autoresolved), got %v", result)
 	}
 
@@ -719,7 +719,7 @@ func TestMergeConflictSameFileAutoresolved(t *testing.T) {
 
 	// merging foo again does nothing
 	result2 := mergeFoo(t, repo)
-	if _, ok := result2.(MergeResultNothing); !ok {
+	if _, ok := result2.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result2)
 	}
 }
@@ -752,7 +752,7 @@ func TestMergeConflictSameFileAutoresolvedNeighboringLines(t *testing.T) {
 
 	result := mergeFoo(t, repo)
 	// for git backend (diff3), neighboring line changes produce a conflict
-	if _, ok := result.(MergeResultConflict); !ok {
+	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 }
@@ -783,7 +783,7 @@ func TestMergeConflictModifyDelete(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if _, ok := result.(MergeResultConflict); !ok {
+	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
@@ -810,13 +810,13 @@ func TestMergeConflictModifyDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result2.(MergeResultSuccess); !ok {
+	if _, ok := result2.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if _, ok := result3.(MergeResultNothing); !ok {
+	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
@@ -847,7 +847,7 @@ func TestMergeConflictDeleteModify(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if _, ok := result.(MergeResultConflict); !ok {
+	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
@@ -874,13 +874,13 @@ func TestMergeConflictDeleteModify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result2.(MergeResultSuccess); !ok {
+	if _, ok := result2.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if _, ok := result3.(MergeResultNothing); !ok {
+	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
@@ -909,7 +909,7 @@ func TestMergeConflictFileDir(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if _, ok := result.(MergeResultConflict); !ok {
+	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
@@ -935,13 +935,13 @@ func TestMergeConflictFileDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result2.(MergeResultSuccess); !ok {
+	if _, ok := result2.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if _, ok := result3.(MergeResultNothing); !ok {
+	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
@@ -970,7 +970,7 @@ func TestMergeConflictDirFile(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if _, ok := result.(MergeResultConflict); !ok {
+	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
@@ -996,13 +996,13 @@ func TestMergeConflictDirFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result2.(MergeResultSuccess); !ok {
+	if _, ok := result2.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if _, ok := result3.(MergeResultNothing); !ok {
+	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
@@ -1050,7 +1050,7 @@ func TestMergeConflictBinary(t *testing.T) {
 	}
 
 	result := mergeFoo(t, repo)
-	if _, ok := result.(MergeResultConflict); !ok {
+	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
@@ -1071,13 +1071,13 @@ func TestMergeConflictBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result2.(MergeResultSuccess); !ok {
+	if _, ok := result2.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if _, ok := result3.(MergeResultNothing); !ok {
+	if _, ok := result3.Result.(MergeResultNothing); !ok {
 		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
@@ -1117,7 +1117,7 @@ func TestMergeConflictShuffle(t *testing.T) {
 		switchBranch(t, repo, "master")
 
 		result := mergeFoo(t, repo)
-		if _, ok := result.(MergeResultSuccess); !ok {
+		if _, ok := result.Result.(MergeResultSuccess); !ok {
 			t.Fatalf("expected success, got %v", result)
 		}
 
@@ -1130,7 +1130,7 @@ func TestMergeConflictShuffle(t *testing.T) {
 
 		// merging foo again does nothing
 		result2 := mergeFoo(t, repo)
-		if _, ok := result2.(MergeResultNothing); !ok {
+		if _, ok := result2.Result.(MergeResultNothing); !ok {
 			t.Fatalf("expected nothing, got %v", result2)
 		}
 	})
@@ -1300,7 +1300,7 @@ func TestCherryPick(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result.(MergeResultSuccess); !ok {
+	if _, ok := result.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", result)
 	}
 
@@ -1318,7 +1318,7 @@ func TestCherryPick(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result2.(MergeResultSuccess); !ok {
+	if _, ok := result2.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", result2)
 	}
 }
@@ -1365,7 +1365,7 @@ func TestCherryPickConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result.(MergeResultConflict); !ok {
+	if _, ok := result.Result.(MergeResultConflict); !ok {
 		t.Fatalf("expected conflict, got %v", result)
 	}
 
@@ -1407,7 +1407,7 @@ func TestCherryPickConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := result2.(MergeResultSuccess); !ok {
+	if _, ok := result2.Result.(MergeResultSuccess); !ok {
 		t.Fatalf("expected success, got %v", result2)
 	}
 }
@@ -1465,7 +1465,7 @@ func TestLog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mergeSuccess2, ok := mergeResult.(MergeResultSuccess)
+	mergeSuccess2, ok := mergeResult.Result.(MergeResultSuccess)
 	if !ok {
 		t.Fatalf("expected success, got %v", mergeResult)
 	}

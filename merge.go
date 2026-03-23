@@ -852,16 +852,25 @@ func (MergeResultNothing) mergeResult()     {}
 func (MergeResultFastForward) mergeResult() {}
 func (MergeResultConflict) mergeResult()    {}
 
+type MergeData struct {
+	BaseOID      Hash
+	TargetName   string
+	SourceName   string
+	Changes      map[string]TreeChange
+	AutoResolved map[string]bool
+	Result       MergeResult
+}
+
 // ---------------------------------------------------------------------------
 // Merge
 // ---------------------------------------------------------------------------
 
 // Performs a merge or cherry-pick of the source ref into the current branch.
-func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
+func (repo *Repo) Merge(input MergeInput) (MergeData, error) {
 	// get the current branch name and oid
 	headRef, err := repo.readRef("HEAD")
 	if err != nil {
-		return nil, fmt.Errorf("target not found: %w", err)
+		return MergeData{}, fmt.Errorf("target not found: %w", err)
 	}
 	targetName := ""
 	switch v := headRef.(type) {
@@ -872,7 +881,7 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 	}
 	targetOIDMaybe, err := repo.readRefRecur(headRef)
 	if err != nil && !errors.Is(err, ErrRefNotFound) {
-		return nil, err
+		return MergeData{}, err
 	}
 
 	mergeHeadName := mergeHeadNames[0]
@@ -882,21 +891,22 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 
 	cleanDiff := make(map[string]TreeChange)
 	conflicts := make(map[string]*MergeConflict)
+	autoResolved := make(map[string]bool)
 
 	switch action := input.Action.(type) {
 	case MergeActionNew:
 		// make sure there is no unfinished merge in progress
 		if err := repo.checkForUnfinishedMerge(); err != nil {
-			return nil, err
+			return MergeData{}, err
 		}
 
 		// get the source and target oid
 		sourceOID, err := repo.readRefRecur(action.Source)
 		if err != nil {
-			return nil, fmt.Errorf("invalid merge source: %w", err)
+			return MergeData{}, fmt.Errorf("invalid merge source: %w", err)
 		}
 		if sourceOID == nil {
-			return nil, errors.New("invalid merge source")
+			return MergeData{}, errors.New("invalid merge source")
 		}
 
 		sourceName := ""
@@ -911,25 +921,31 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 		if targetOID == nil {
 			// the target branch is completely empty, so just set it to the source oid
 			if err := repo.writeRefRecur("HEAD", sourceOID); err != nil {
-				return nil, err
+				return MergeData{}, err
 			}
 
 			// make a TreeDiff that adds all files from source
 			sourceDiff, err := repo.treeDiff(nil, sourceOID)
 			if err != nil {
-				return nil, err
+				return MergeData{}, err
 			}
 
 			idx, err := repo.readIndex()
 			if err != nil {
-				return nil, err
+				return MergeData{}, err
 			}
 
 			if err := repo.migrate(sourceDiff, idx, true, nil); err != nil {
-				return nil, err
+				return MergeData{}, err
 			}
 
-			return MergeResultFastForward{}, nil
+			return MergeData{
+				TargetName:   targetName,
+				SourceName:   sourceName,
+				Changes:      cleanDiff,
+				AutoResolved: autoResolved,
+				Result:       MergeResultFastForward{},
+			}, nil
 		}
 
 		// get the base oid
@@ -938,16 +954,16 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 		case MergeKindFull:
 			baseOID, err = commonAncestor(repo, targetOID, sourceOID)
 			if err != nil {
-				return nil, err
+				return MergeData{}, err
 			}
 		case MergeKindPick:
 			obj, err := repo.NewObject(sourceOID, true)
 			if err != nil {
-				return nil, err
+				return MergeData{}, err
 			}
 			if obj.Commit == nil || len(obj.Commit.ParentOIDs) == 0 {
 				obj.Close()
-				return nil, errors.New("cherry-pick commit must have at least one parent")
+				return MergeData{}, errors.New("cherry-pick commit must have at least one parent")
 			}
 			baseOID = obj.Commit.ParentOIDs[0]
 			obj.Close()
@@ -955,19 +971,26 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 
 		// if the base ancestor is the source oid, do nothing
 		if HashEqual(sourceOID, baseOID) {
-			return MergeResultNothing{}, nil
+			return MergeData{
+				BaseOID:      baseOID,
+				TargetName:   targetName,
+				SourceName:   sourceName,
+				Changes:      cleanDiff,
+				AutoResolved: autoResolved,
+				Result:       MergeResultNothing{},
+			}, nil
 		}
 
 		// diff the base ancestor with the target oid
 		targetDiff, err := repo.treeDiff(baseOID, targetOID)
 		if err != nil {
-			return nil, err
+			return MergeData{}, err
 		}
 
 		// diff the base ancestor with the source oid
 		sourceDiff, err := repo.treeDiff(baseOID, sourceOID)
 		if err != nil {
-			return nil, err
+			return MergeData{}, err
 		}
 
 		// look for same path conflicts while populating the clean diff
@@ -978,13 +1001,15 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 			}
 			result, err := samePathConflict(repo, baseOID, targetOID, sourceOID, targetName, sourceName, targetChangeMaybe, sourceChange, path)
 			if err != nil {
-				return nil, err
+				return MergeData{}, err
 			}
 			if result.Change != nil {
 				cleanDiff[path] = *result.Change
 			}
 			if result.Conflict != nil {
 				conflicts[path] = result.Conflict
+			} else {
+				autoResolved[path] = true
 			}
 		}
 
@@ -1011,7 +1036,7 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 			case MergeKindPick:
 				obj, err := repo.NewObject(sourceOID, true)
 				if err != nil {
-					return nil, err
+					return MergeData{}, err
 				}
 				if obj.Commit != nil {
 					metadata = &CommitMetadata{
@@ -1055,7 +1080,7 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 			lock.Success = true
 			return nil
 		}(); err != nil {
-			return nil, err
+			return MergeData{}, err
 		}
 
 		// exit early if there were conflicts
@@ -1069,17 +1094,31 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 			}
 			os.WriteFile(msgPath, []byte(msg), 0644)
 
-			return MergeResultConflict{
-				Conflicts: conflicts,
+			return MergeData{
+				BaseOID:      baseOID,
+				TargetName:   targetName,
+				SourceName:   sourceName,
+				Changes:      cleanDiff,
+				AutoResolved: autoResolved,
+				Result: MergeResultConflict{
+					Conflicts: conflicts,
+				},
 			}, nil
 		}
 
 		if HashEqual(targetOID, baseOID) {
 			// the base ancestor is the target oid, so just update HEAD
 			if err := repo.writeRefRecur("HEAD", sourceOID); err != nil {
-				return nil, err
+				return MergeData{}, err
 			}
-			return MergeResultFastForward{}, nil
+			return MergeData{
+				BaseOID:      baseOID,
+				TargetName:   targetName,
+				SourceName:   sourceName,
+				Changes:      cleanDiff,
+				AutoResolved: autoResolved,
+				Result:       MergeResultFastForward{},
+			}, nil
 		}
 
 		// commit the change
@@ -1091,36 +1130,43 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 		}
 		commitOID, err := repo.writeCommit(*metadata)
 		if err != nil {
-			return nil, err
+			return MergeData{}, err
 		}
 
-		return MergeResultSuccess{OID: commitOID}, nil
+		return MergeData{
+			BaseOID:      baseOID,
+			TargetName:   targetName,
+			SourceName:   sourceName,
+			Changes:      cleanDiff,
+			AutoResolved: autoResolved,
+			Result:       MergeResultSuccess{OID: commitOID},
+		}, nil
 
 	case MergeActionCont:
 		// ensure there are no conflict entries in the index
 		idx, err := repo.readIndex()
 		if err != nil {
-			return nil, err
+			return MergeData{}, err
 		}
 		for _, entries := range idx.entries {
 			if entries[0] == nil {
-				return nil, errors.New("cannot continue merge with unresolved conflicts")
+				return MergeData{}, errors.New("cannot continue merge with unresolved conflicts")
 			}
 		}
 
 		// make sure there isn't another kind of merge in progress
 		if err := checkForOtherMerge(repo, mergeHeadName); err != nil {
-			return nil, err
+			return MergeData{}, err
 		}
 
 		sourceOID, err := repo.readRefRecur(RefValue{Ref: Ref{Kind: RefNone, Name: mergeHeadName}})
 		if err != nil || sourceOID == nil {
-			return nil, errors.New("merge head not found")
+			return MergeData{}, errors.New("merge head not found")
 		}
 
 		targetOID := targetOIDMaybe
 		if targetOID == nil {
-			return nil, errors.New("target oid not found")
+			return MergeData{}, errors.New("target oid not found")
 		}
 
 		// read commit message
@@ -1132,7 +1178,7 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 			msgPath := filepath.Join(repo.repoPath, mergeMsgName)
 			data, err := os.ReadFile(msgPath)
 			if err != nil {
-				return nil, errors.New("merge message not found")
+				return MergeData{}, errors.New("merge message not found")
 			}
 			metadata.Message = string(data)
 		}
@@ -1145,21 +1191,20 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 		case MergeKindFull:
 			baseOID, err = commonAncestor(repo, targetOID, sourceOID)
 			if err != nil {
-				return nil, err
+				return MergeData{}, err
 			}
 		case MergeKindPick:
 			obj, err := repo.NewObject(sourceOID, true)
 			if err != nil {
-				return nil, err
+				return MergeData{}, err
 			}
 			if obj.Commit == nil || len(obj.Commit.ParentOIDs) == 0 {
 				obj.Close()
-				return nil, errors.New("cherry-pick commit must have at least one parent")
+				return MergeData{}, errors.New("cherry-pick commit must have at least one parent")
 			}
 			baseOID = obj.Commit.ParentOIDs[0]
 			obj.Close()
 		}
-		_ = sourceName
 
 		// clean up the stored merge state
 		removeMergeState(repo)
@@ -1171,18 +1216,24 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 		case MergeKindPick:
 			metadata.ParentOIDs = []Hash{targetOID}
 		}
-		_ = baseOID
 		commitOID, err := repo.writeCommit(*metadata)
 		if err != nil {
-			return nil, err
+			return MergeData{}, err
 		}
 
-		return MergeResultSuccess{OID: commitOID}, nil
+		return MergeData{
+			BaseOID:      baseOID,
+			TargetName:   targetName,
+			SourceName:   sourceName,
+			Changes:      cleanDiff,
+			AutoResolved: autoResolved,
+			Result:       MergeResultSuccess{OID: commitOID},
+		}, nil
 
 	case MergeActionAbort:
 		targetOID := targetOIDMaybe
 		if targetOID == nil {
-			return nil, errors.New("target oid not found")
+			return MergeData{}, errors.New("target oid not found")
 		}
 		removeMergeState(repo)
 		_, err := repo.Switch(SwitchInput{
@@ -1192,10 +1243,15 @@ func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 			Force:         true,
 		})
 		if err != nil {
-			return nil, err
+			return MergeData{}, err
 		}
-		return MergeResultSuccess{}, nil
+		return MergeData{
+			TargetName:   targetName,
+			Changes:      cleanDiff,
+			AutoResolved: autoResolved,
+			Result:       MergeResultSuccess{},
+		}, nil
 	}
 
-	return nil, errors.New("invalid merge action")
+	return MergeData{}, errors.New("invalid merge action")
 }

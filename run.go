@@ -470,11 +470,11 @@ func runCommand(opts RepoOpts, cmd *command, cwdPath string, runOpts RunOpts) er
 		if err != nil {
 			return ErrRepoNotFound
 		}
-		result, err := repo.Merge(cmd.Merge.Input)
+		data, err := repo.Merge(cmd.Merge.Input)
 		if err != nil {
 			return err
 		}
-		switch r := result.(type) {
+		switch r := data.Result.(type) {
 		case MergeResultSuccess:
 			// nothing to print
 		case MergeResultNothing:
