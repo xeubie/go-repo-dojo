@@ -34,7 +34,7 @@ GoRepoMofo implements Git in Go. See below for the functionality it currently ha
 * GoRepoMofo supports three-way merge and conflict resolution (go-git only supports simple fast-forward merges)
 * go-git supports a lot of stuff that GoRepoMofo doesn't (client-side networking, stash, blame, etc)
 * Both support server-side networking (`receive-pack` and `upload-pack`)
-* Both support custom object stores (see the [MemoryObjectStore](object_memory.go) and how it is used in the [repo test](repo_test.go))
+* Both support custom object stores (see the [memoryObjectStore](object_memory.go) and how it is used in the [repo test](repo_test.go))
 * GoRepoMofo is a much cooler name
 
 ## Using as a library
@@ -52,7 +52,9 @@ help: repomofo <command> [<args>]
 init          create an empty repository.
 add           add file contents to the index.
 unadd         remove any changes to a file that were added to the index.
+              similar to `git reset HEAD`.
 untrack       no longer track file in the index, but leave it in the work dir.
+              similar to `git rm --cached`.
 rm            no longer track file in the index *and* remove it from the work dir.
 commit        create a new commit.
 tag           add, remove, and list tags.

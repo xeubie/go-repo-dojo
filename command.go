@@ -61,8 +61,8 @@ var commandNames = map[commandKind]string{
 var commandDescrips = map[commandKind]string{
 	commandInit:        "create an empty repository.",
 	commandAdd:         "add file contents to the index.",
-	commandUnadd:       "remove any changes to a file that were added to the index.",
-	commandUntrack:     "no longer track file in the index, but leave it in the work dir.",
+	commandUnadd:       "remove any changes to a file that were added to the index.\nsimilar to `git reset HEAD`.",
+	commandUntrack:     "no longer track file in the index, but leave it in the work dir.\nsimilar to `git rm --cached`.",
 	commandRm:          "no longer track file in the index *and* remove it from the work dir.",
 	commandCommit:      "create a new commit.",
 	commandTag:         "add, remove, and list tags.",
