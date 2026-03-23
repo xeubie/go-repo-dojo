@@ -27,7 +27,7 @@ type Status struct {
 	ResolvedConflicts   map[string]TreeEntry
 }
 
-func (repo *Repo) status() (*Status, error) {
+func (repo *Repo) Status() (*Status, error) {
 	idx, err := repo.readIndex()
 	if err != nil {
 		return nil, err

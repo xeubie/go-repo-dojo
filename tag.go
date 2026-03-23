@@ -16,7 +16,7 @@ type RemoveTagInput struct {
 	Name string
 }
 
-func (repo *Repo) addTag(input AddTagInput) (Hash, error) {
+func (repo *Repo) AddTag(input AddTagInput) (Hash, error) {
 	if !validateRefName(input.Name) {
 		return nil, errors.New("invalid tag name")
 	}
@@ -42,7 +42,7 @@ func (repo *Repo) addTag(input AddTagInput) (Hash, error) {
 	return tagOID, nil
 }
 
-func (repo *Repo) removeTag(input RemoveTagInput) error {
+func (repo *Repo) RemoveTag(input RemoveTagInput) error {
 	tagsDir := filepath.Join(repo.repoPath, "refs", "tags")
 
 	if err := os.Remove(filepath.Join(tagsDir, input.Name)); err != nil {
@@ -61,7 +61,7 @@ func (repo *Repo) removeTag(input RemoveTagInput) error {
 	return nil
 }
 
-func (repo *Repo) listTags() (*RefIterator, error) {
+func (repo *Repo) ListTags() (*RefIterator, error) {
 	tagsDir := filepath.Join(repo.repoPath, "refs", "tags")
 	return newRefIterator(tagsDir, RefTag)
 }

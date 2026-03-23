@@ -1125,7 +1125,7 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open repo failed: %v", err)
 		}
-		iter, err := repo.listBranches()
+		iter, err := repo.ListBranches()
 		if err != nil {
 			t.Fatalf("list branches failed: %v", err)
 		}
@@ -1171,7 +1171,7 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open repo failed: %v", err)
 		}
-		err = repo.removeBranch(RemoveBranchInput{Name: "stuff"})
+		err = repo.RemoveBranch(RemoveBranchInput{Name: "stuff"})
 		if err != ErrCannotDeleteCurrentBranch {
 			t.Fatalf("expected ErrCannotDeleteCurrentBranch, got %v", err)
 		}
@@ -1244,7 +1244,7 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open repo failed: %v", err)
 		}
-		iter, err := repo.listBranches()
+		iter, err := repo.ListBranches()
 		if err != nil {
 			t.Fatalf("list branches failed: %v", err)
 		}

@@ -23,7 +23,7 @@ func validateBranchName(name string) bool {
 	return validateRefName(name) && name != "HEAD"
 }
 
-func (repo *Repo) addBranch(input AddBranchInput) error {
+func (repo *Repo) AddBranch(input AddBranchInput) error {
 	if !validateBranchName(input.Name) {
 		return errors.New("invalid branch name")
 	}
@@ -60,7 +60,7 @@ func (repo *Repo) addBranch(input AddBranchInput) error {
 	return nil
 }
 
-func (repo *Repo) removeBranch(input RemoveBranchInput) error {
+func (repo *Repo) RemoveBranch(input RemoveBranchInput) error {
 	// don't allow current branch to be deleted
 	currentRef, err := repo.readRef("HEAD")
 	if rv, ok := currentRef.(RefValue); err == nil && ok {
@@ -87,7 +87,7 @@ func (repo *Repo) removeBranch(input RemoveBranchInput) error {
 	return nil
 }
 
-func (repo *Repo) listBranches() (*RefIterator, error) {
+func (repo *Repo) ListBranches() (*RefIterator, error) {
 	headsDir := filepath.Join(repo.repoPath, "refs", "heads")
 	return newRefIterator(headsDir, RefHead)
 }

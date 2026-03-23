@@ -72,7 +72,7 @@ func InitRepo(workPath string, opts RepoOpts) (*Repo, error) {
 	}
 
 	// create default branch "master"
-	if err := repo.addBranch(AddBranchInput{Name: "master"}); err != nil {
+	if err := repo.AddBranch(AddBranchInput{Name: "master"}); err != nil {
 		return nil, err
 	}
 
@@ -292,11 +292,6 @@ func (r *Repo) Commit(metadata CommitMetadata) (Hash, error) {
 	return r.writeCommit(metadata)
 }
 
-// Returns the working directory and index status relative to HEAD.
-func (r *Repo) Status() (*Status, error) {
-	return r.status()
-}
-
 // Restores a file in the working directory to its HEAD tree content.
 func (r *Repo) Restore(path string) error {
 	rel, err := relativePath(r.workPath, path)
@@ -356,32 +351,3 @@ func (r *Repo) Log(startOIDs []Hash) (*ObjectIterator, error) {
 	return iter, nil
 }
 
-// Creates a new branch pointing at the current HEAD commit.
-func (r *Repo) AddBranch(input AddBranchInput) error {
-	return r.addBranch(input)
-}
-
-// Deletes a branch by name.
-func (r *Repo) RemoveBranch(input RemoveBranchInput) error {
-	return r.removeBranch(input)
-}
-
-// Returns an iterator over all branches.
-func (r *Repo) ListBranches() (*RefIterator, error) {
-	return r.listBranches()
-}
-
-// Creates an annotated tag object pointing at HEAD and returns its OID.
-func (r *Repo) AddTag(input AddTagInput) (Hash, error) {
-	return r.addTag(input)
-}
-
-// Deletes a tag ref by name.
-func (r *Repo) RemoveTag(input RemoveTagInput) error {
-	return r.removeTag(input)
-}
-
-// Returns an iterator over all tags.
-func (r *Repo) ListTags() (*RefIterator, error) {
-	return r.listTags()
-}
