@@ -471,7 +471,7 @@ func runCommand(opts RepoOpts, cmd *command, cwdPath string, runOpts RunOpts) er
 		if err != nil {
 			return err
 		}
-		switch result.Kind {
+		switch r := result.(type) {
 		case MergeResultSuccess:
 			// nothing to print
 		case MergeResultNothing:
@@ -479,7 +479,7 @@ func runCommand(opts RepoOpts, cmd *command, cwdPath string, runOpts RunOpts) er
 		case MergeResultFastForward:
 			fmt.Fprintf(runOpts.Out, "fast-forward\n")
 		case MergeResultConflict:
-			for path, conflict := range result.Conflicts {
+			for path, conflict := range r.Conflicts {
 				if conflict.Renamed != nil {
 					conflictType := "file/directory"
 					if conflict.Target == nil {

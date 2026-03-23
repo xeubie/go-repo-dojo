@@ -598,14 +598,14 @@ func parseCommand(cmdArgs *commandArgs) *command {
 				return nil
 			}
 			return &command{Kind: *cmdArgs.commandKind, Merge: &mergeCommand{
-				Input: MergeInput{Kind: kind, Action: MergeActionCont},
+				Input: MergeInput{Kind: kind, Action: MergeActionCont{}},
 			}}
 		} else if cmdArgs.Contains("--abort") {
 			if len(cmdArgs.PositionalArgs) != 0 {
 				return nil
 			}
 			return &command{Kind: *cmdArgs.commandKind, Merge: &mergeCommand{
-				Input: MergeInput{Kind: kind, Action: MergeActionAbort},
+				Input: MergeInput{Kind: kind, Action: MergeActionAbort{}},
 			}}
 		} else {
 			if len(cmdArgs.PositionalArgs) != 1 {
@@ -616,7 +616,7 @@ func parseCommand(cmdArgs *commandArgs) *command {
 				return nil
 			}
 			return &command{Kind: *cmdArgs.commandKind, Merge: &mergeCommand{
-				Input: MergeInput{Kind: kind, Action: MergeActionNew, Source: *source},
+				Input: MergeInput{Kind: kind, Action: MergeActionNew{Source: *source}},
 			}}
 		}
 

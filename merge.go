@@ -816,42 +816,50 @@ const (
 	MergeKindPick                  // cherry-pick
 )
 
-type MergeAction int
+type MergeAction interface {
+	mergeAction()
+}
 
-const (
-	MergeActionNew   MergeAction = iota
-	MergeActionCont              // --continue
-	MergeActionAbort             // --abort
-)
+type MergeActionNew struct {
+	Source RefOrOid
+}
+type MergeActionCont struct{}
+type MergeActionAbort struct{}
+
+func (MergeActionNew) mergeAction()   {}
+func (MergeActionCont) mergeAction()  {}
+func (MergeActionAbort) mergeAction() {}
 
 type MergeInput struct {
 	Kind     MergeKind
 	Action   MergeAction
-	Source   RefOrOid // used when Action == MergeActionNew
 	Metadata *CommitMetadata
 }
 
-type MergeResultKind int
+type MergeResult interface {
+	mergeResult()
+}
 
-const (
-	MergeResultSuccess     MergeResultKind = iota
-	MergeResultNothing                     // already merged
-	MergeResultFastForward                 // fast-forwarded
-	MergeResultConflict                    // conflicts exist
-)
-
-type MergeResult struct {
-	Kind      MergeResultKind
-	OID       string // commit OID for success
+type MergeResultSuccess struct {
+	OID string
+}
+type MergeResultNothing struct{}
+type MergeResultFastForward struct{}
+type MergeResultConflict struct {
 	Conflicts map[string]*MergeConflict
 }
+
+func (MergeResultSuccess) mergeResult()     {}
+func (MergeResultNothing) mergeResult()     {}
+func (MergeResultFastForward) mergeResult() {}
+func (MergeResultConflict) mergeResult()    {}
 
 // ---------------------------------------------------------------------------
 // Merge
 // ---------------------------------------------------------------------------
 
 // Performs a merge or cherry-pick of the source ref into the current branch.
-func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
+func (repo *Repo) Merge(input MergeInput) (MergeResult, error) {
 	// get the current branch name and oid
 	headRef, err := repo.readRef("HEAD")
 	if err != nil {
@@ -876,7 +884,7 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 	cleanDiff := make(map[string]TreeChange)
 	conflicts := make(map[string]*MergeConflict)
 
-	switch input.Action {
+	switch action := input.Action.(type) {
 	case MergeActionNew:
 		// make sure there is no unfinished merge in progress
 		if err := repo.checkForUnfinishedMerge(); err != nil {
@@ -884,7 +892,7 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 		}
 
 		// get the source and target oid
-		sourceOID, err := repo.readRefRecur(input.Source)
+		sourceOID, err := repo.readRefRecur(action.Source)
 		if err != nil {
 			return nil, fmt.Errorf("invalid merge source: %w", err)
 		}
@@ -893,10 +901,10 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 		}
 
 		sourceName := ""
-		if input.Source.IsRef {
-			sourceName = input.Source.Ref.Name
+		if action.Source.IsRef {
+			sourceName = action.Source.Ref.Name
 		} else {
-			sourceName = input.Source.OID
+			sourceName = action.Source.OID
 		}
 
 		targetOID := targetOIDMaybe
@@ -921,7 +929,7 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 				return nil, err
 			}
 
-			return &MergeResult{Kind: MergeResultFastForward}, nil
+			return MergeResultFastForward{}, nil
 		}
 
 		// get the base oid
@@ -947,7 +955,7 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 
 		// if the base ancestor is the source oid, do nothing
 		if sourceOID == baseOID {
-			return &MergeResult{Kind: MergeResultNothing}, nil
+			return MergeResultNothing{}, nil
 		}
 
 		// diff the base ancestor with the target oid
@@ -1061,8 +1069,7 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 			}
 			os.WriteFile(msgPath, []byte(msg), 0644)
 
-			return &MergeResult{
-				Kind:      MergeResultConflict,
+			return MergeResultConflict{
 				Conflicts: conflicts,
 			}, nil
 		}
@@ -1072,7 +1079,7 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 			if err := repo.writeRefRecur("HEAD", sourceOID); err != nil {
 				return nil, err
 			}
-			return &MergeResult{Kind: MergeResultFastForward}, nil
+			return MergeResultFastForward{}, nil
 		}
 
 		// commit the change
@@ -1087,7 +1094,7 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 			return nil, err
 		}
 
-		return &MergeResult{Kind: MergeResultSuccess, OID: commitOID}, nil
+		return MergeResultSuccess{OID: commitOID}, nil
 
 	case MergeActionCont:
 		// ensure there are no conflict entries in the index
@@ -1170,7 +1177,7 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 			return nil, err
 		}
 
-		return &MergeResult{Kind: MergeResultSuccess, OID: commitOID}, nil
+		return MergeResultSuccess{OID: commitOID}, nil
 
 	case MergeActionAbort:
 		targetOID := targetOIDMaybe
@@ -1187,7 +1194,7 @@ func (repo *Repo) Merge(input MergeInput) (*MergeResult, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &MergeResult{Kind: MergeResultSuccess}, nil
+		return MergeResultSuccess{}, nil
 	}
 
 	return nil, errors.New("invalid merge action")

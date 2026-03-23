@@ -299,16 +299,16 @@ func TestMerge(t *testing.T) {
 	// merge foo into master
 	mergeResult, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
-		Action: MergeActionNew,
-		Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}},
+		Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mergeResult.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", mergeResult.Kind)
+	mergeSuccess, ok := mergeResult.(MergeResultSuccess)
+	if !ok {
+		t.Fatalf("expected success, got %v", mergeResult)
 	}
-	commitJ := mergeResult.OID
+	commitJ := mergeSuccess.OID
 
 	addFile(t, repo, "master.md", "k")
 	commitK, err := repo.Commit(CommitMetadata{Message: "k"})
@@ -339,14 +339,13 @@ func TestMerge(t *testing.T) {
 	{
 		mergeResult, err := repo.Merge(MergeInput{
 			Kind:   MergeKindFull,
-			Action: MergeActionNew,
-			Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}},
+			Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}}},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if mergeResult.Kind != MergeResultNothing {
-			t.Fatalf("expected nothing, got %d", mergeResult.Kind)
+		if _, ok := mergeResult.(MergeResultNothing); !ok {
+			t.Fatalf("expected nothing, got %v", mergeResult)
 		}
 	}
 
@@ -357,14 +356,13 @@ func TestMerge(t *testing.T) {
 		}
 		mergeResult, err := repo.Merge(MergeInput{
 			Kind:   MergeKindFull,
-			Action: MergeActionNew,
-			Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "master"}},
+			Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "master"}}},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if mergeResult.Kind != MergeResultFastForward {
-			t.Fatalf("expected fast_forward, got %d", mergeResult.Kind)
+		if _, ok := mergeResult.(MergeResultFastForward); !ok {
+			t.Fatalf("expected fast_forward, got %v", mergeResult)
 		}
 
 		headOID, err := repo.ReadHeadRecurMaybe()
@@ -454,14 +452,13 @@ func TestMergeSideBranch(t *testing.T) {
 	// commit f (merge side into master)
 	mergeResult, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
-		Action: MergeActionNew,
-		Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "side"}},
+		Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "side"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mergeResult.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", mergeResult.Kind)
+	if _, ok := mergeResult.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", mergeResult)
 	}
 
 	addFile(t, repo, "master.md", "g")
@@ -521,12 +518,11 @@ func switchBranch(t *testing.T, repo *Repo, name string) {
 	}
 }
 
-func mergeFoo(t *testing.T, repo *Repo) *MergeResult {
+func mergeFoo(t *testing.T, repo *Repo) MergeResult {
 	t.Helper()
 	result, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
-		Action: MergeActionNew,
-		Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}},
+		Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -570,8 +566,8 @@ func TestMergeConflictSameFile(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if result.Kind != MergeResultConflict {
-		t.Fatalf("expected conflict, got %d", result.Kind)
+	if _, ok := result.(MergeResultConflict); !ok {
+		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// verify f.txt has conflict markers
@@ -586,33 +582,32 @@ func TestMergeConflictSameFile(t *testing.T) {
 	// can't merge again with an unresolved merge
 	_, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
-		Action: MergeActionNew,
-		Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}},
+		Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
 	if err == nil {
 		t.Fatal("expected error for merge during unresolved conflict")
 	}
 
 	// can't continue merge with unresolved conflicts
-	_, err = repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	_, err = repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err == nil {
 		t.Fatal("expected error for continue with unresolved conflicts")
 	}
 
 	// resolve conflict and continue
 	addFile(t, repo, "f.txt", "a\nx\nc")
-	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result2.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", result2.Kind)
+	if _, ok := result2.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if result3.Kind != MergeResultNothing {
-		t.Fatalf("expected nothing, got %d", result3.Kind)
+	if _, ok := result3.(MergeResultNothing); !ok {
+		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
@@ -643,8 +638,8 @@ func TestMergeConflictSameFileEmptyBase(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if result.Kind != MergeResultConflict {
-		t.Fatalf("expected conflict, got %d", result.Kind)
+	if _, ok := result.(MergeResultConflict); !ok {
+		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// verify f.txt has conflict markers
@@ -656,33 +651,32 @@ func TestMergeConflictSameFileEmptyBase(t *testing.T) {
 	// can't merge again with an unresolved merge
 	_, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
-		Action: MergeActionNew,
-		Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}},
+		Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
 	if err == nil {
 		t.Fatal("expected error for merge during unresolved conflict")
 	}
 
 	// can't continue merge with unresolved conflicts
-	_, err = repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	_, err = repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err == nil {
 		t.Fatal("expected error for continue with unresolved conflicts")
 	}
 
 	// resolve conflict and continue
 	addFile(t, repo, "f.txt", "a\ny\nc\n")
-	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result2.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", result2.Kind)
+	if _, ok := result2.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if result3.Kind != MergeResultNothing {
-		t.Fatalf("expected nothing, got %d", result3.Kind)
+	if _, ok := result3.(MergeResultNothing); !ok {
+		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
@@ -713,8 +707,8 @@ func TestMergeConflictSameFileAutoresolved(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if result.Kind != MergeResultSuccess {
-		t.Fatalf("expected success (autoresolved), got %d", result.Kind)
+	if _, ok := result.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success (autoresolved), got %v", result)
 	}
 
 	// verify f.txt has been autoresolved
@@ -725,8 +719,8 @@ func TestMergeConflictSameFileAutoresolved(t *testing.T) {
 
 	// merging foo again does nothing
 	result2 := mergeFoo(t, repo)
-	if result2.Kind != MergeResultNothing {
-		t.Fatalf("expected nothing, got %d", result2.Kind)
+	if _, ok := result2.(MergeResultNothing); !ok {
+		t.Fatalf("expected nothing, got %v", result2)
 	}
 }
 
@@ -758,8 +752,8 @@ func TestMergeConflictSameFileAutoresolvedNeighboringLines(t *testing.T) {
 
 	result := mergeFoo(t, repo)
 	// for git backend (diff3), neighboring line changes produce a conflict
-	if result.Kind != MergeResultConflict {
-		t.Fatalf("expected conflict, got %d", result.Kind)
+	if _, ok := result.(MergeResultConflict); !ok {
+		t.Fatalf("expected conflict, got %v", result)
 	}
 }
 
@@ -789,22 +783,21 @@ func TestMergeConflictModifyDelete(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if result.Kind != MergeResultConflict {
-		t.Fatalf("expected conflict, got %d", result.Kind)
+	if _, ok := result.(MergeResultConflict); !ok {
+		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// can't merge again with an unresolved merge
 	_, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
-		Action: MergeActionNew,
-		Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}},
+		Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
 	if err == nil {
 		t.Fatal("expected error for merge during unresolved conflict")
 	}
 
 	// can't continue merge with unresolved conflicts
-	_, err = repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	_, err = repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err == nil {
 		t.Fatal("expected error for continue with unresolved conflicts")
 	}
@@ -813,18 +806,18 @@ func TestMergeConflictModifyDelete(t *testing.T) {
 	if err := repo.Add([]string{"f.txt"}); err != nil {
 		t.Fatal(err)
 	}
-	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result2.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", result2.Kind)
+	if _, ok := result2.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if result3.Kind != MergeResultNothing {
-		t.Fatalf("expected nothing, got %d", result3.Kind)
+	if _, ok := result3.(MergeResultNothing); !ok {
+		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
@@ -854,22 +847,21 @@ func TestMergeConflictDeleteModify(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if result.Kind != MergeResultConflict {
-		t.Fatalf("expected conflict, got %d", result.Kind)
+	if _, ok := result.(MergeResultConflict); !ok {
+		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// can't merge again with an unresolved merge
 	_, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
-		Action: MergeActionNew,
-		Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}},
+		Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
 	if err == nil {
 		t.Fatal("expected error for merge during unresolved conflict")
 	}
 
 	// can't continue merge with unresolved conflicts
-	_, err = repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	_, err = repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err == nil {
 		t.Fatal("expected error for continue with unresolved conflicts")
 	}
@@ -878,18 +870,18 @@ func TestMergeConflictDeleteModify(t *testing.T) {
 	if err := repo.Add([]string{"f.txt"}); err != nil {
 		t.Fatal(err)
 	}
-	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result2.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", result2.Kind)
+	if _, ok := result2.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if result3.Kind != MergeResultNothing {
-		t.Fatalf("expected nothing, got %d", result3.Kind)
+	if _, ok := result3.(MergeResultNothing); !ok {
+		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
@@ -917,8 +909,8 @@ func TestMergeConflictFileDir(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if result.Kind != MergeResultConflict {
-		t.Fatalf("expected conflict, got %d", result.Kind)
+	if _, ok := result.(MergeResultConflict); !ok {
+		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// make sure renamed file exists
@@ -929,8 +921,7 @@ func TestMergeConflictFileDir(t *testing.T) {
 	// can't merge again with an unresolved merge
 	_, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
-		Action: MergeActionNew,
-		Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}},
+		Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
 	if err == nil {
 		t.Fatal("expected error for merge during unresolved conflict")
@@ -940,18 +931,18 @@ func TestMergeConflictFileDir(t *testing.T) {
 	if err := repo.Add([]string{"f.txt"}); err != nil {
 		t.Fatal(err)
 	}
-	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result2.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", result2.Kind)
+	if _, ok := result2.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if result3.Kind != MergeResultNothing {
-		t.Fatalf("expected nothing, got %d", result3.Kind)
+	if _, ok := result3.(MergeResultNothing); !ok {
+		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
@@ -979,8 +970,8 @@ func TestMergeConflictDirFile(t *testing.T) {
 	switchBranch(t, repo, "master")
 
 	result := mergeFoo(t, repo)
-	if result.Kind != MergeResultConflict {
-		t.Fatalf("expected conflict, got %d", result.Kind)
+	if _, ok := result.(MergeResultConflict); !ok {
+		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// make sure renamed file exists
@@ -991,8 +982,7 @@ func TestMergeConflictDirFile(t *testing.T) {
 	// can't merge again with an unresolved merge
 	_, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
-		Action: MergeActionNew,
-		Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}},
+		Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
 	if err == nil {
 		t.Fatal("expected error for merge during unresolved conflict")
@@ -1002,18 +992,18 @@ func TestMergeConflictDirFile(t *testing.T) {
 	if err := repo.Add([]string{"f.txt"}); err != nil {
 		t.Fatal(err)
 	}
-	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result2.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", result2.Kind)
+	if _, ok := result2.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if result3.Kind != MergeResultNothing {
-		t.Fatalf("expected nothing, got %d", result3.Kind)
+	if _, ok := result3.(MergeResultNothing); !ok {
+		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
@@ -1060,8 +1050,8 @@ func TestMergeConflictBinary(t *testing.T) {
 	}
 
 	result := mergeFoo(t, repo)
-	if result.Kind != MergeResultConflict {
-		t.Fatalf("expected conflict, got %d", result.Kind)
+	if _, ok := result.(MergeResultConflict); !ok {
+		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// verify no lines are longer than one byte
@@ -1077,18 +1067,18 @@ func TestMergeConflictBinary(t *testing.T) {
 	if err := repo.Add([]string{"bin"}); err != nil {
 		t.Fatal(err)
 	}
-	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	result2, err := repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result2.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", result2.Kind)
+	if _, ok := result2.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", result2)
 	}
 
 	// merging foo again does nothing
 	result3 := mergeFoo(t, repo)
-	if result3.Kind != MergeResultNothing {
-		t.Fatalf("expected nothing, got %d", result3.Kind)
+	if _, ok := result3.(MergeResultNothing); !ok {
+		t.Fatalf("expected nothing, got %v", result3)
 	}
 }
 
@@ -1127,8 +1117,8 @@ func TestMergeConflictShuffle(t *testing.T) {
 		switchBranch(t, repo, "master")
 
 		result := mergeFoo(t, repo)
-		if result.Kind != MergeResultSuccess {
-			t.Fatalf("expected success, got %d", result.Kind)
+		if _, ok := result.(MergeResultSuccess); !ok {
+			t.Fatalf("expected success, got %v", result)
 		}
 
 		// git shuffles lines
@@ -1140,8 +1130,8 @@ func TestMergeConflictShuffle(t *testing.T) {
 
 		// merging foo again does nothing
 		result2 := mergeFoo(t, repo)
-		if result2.Kind != MergeResultNothing {
-			t.Fatalf("expected nothing, got %d", result2.Kind)
+		if _, ok := result2.(MergeResultNothing); !ok {
+			t.Fatalf("expected nothing, got %v", result2)
 		}
 	})
 
@@ -1305,14 +1295,13 @@ func TestCherryPick(t *testing.T) {
 
 	result, err := repo.Merge(MergeInput{
 		Kind:   MergeKindPick,
-		Action: MergeActionNew,
-		Source: RefOrOid{OID: commitD},
+		Action: MergeActionNew{Source: RefOrOid{OID: commitD}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", result.Kind)
+	if _, ok := result.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", result)
 	}
 
 	// make sure stuff.md does not exist
@@ -1323,15 +1312,14 @@ func TestCherryPick(t *testing.T) {
 	// if we try cherry-picking the same commit again, it succeeds again
 	result2, err := repo.Merge(MergeInput{
 		Kind:     MergeKindPick,
-		Action:   MergeActionNew,
-		Source:   RefOrOid{OID: commitD},
+		Action: MergeActionNew{Source: RefOrOid{OID: commitD}},
 		Metadata: &CommitMetadata{Message: "d", AllowEmpty: true},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result2.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", result2.Kind)
+	if _, ok := result2.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", result2)
 	}
 }
 
@@ -1372,14 +1360,13 @@ func TestCherryPickConflict(t *testing.T) {
 
 	result, err := repo.Merge(MergeInput{
 		Kind:   MergeKindPick,
-		Action: MergeActionNew,
-		Source: RefOrOid{OID: commitD},
+		Action: MergeActionNew{Source: RefOrOid{OID: commitD}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Kind != MergeResultConflict {
-		t.Fatalf("expected conflict, got %d", result.Kind)
+	if _, ok := result.(MergeResultConflict); !ok {
+		t.Fatalf("expected conflict, got %v", result)
 	}
 
 	// verify readme.md has conflict markers
@@ -1394,15 +1381,14 @@ func TestCherryPickConflict(t *testing.T) {
 	// can't cherry-pick again with an unresolved cherry-pick
 	_, err = repo.Merge(MergeInput{
 		Kind:   MergeKindPick,
-		Action: MergeActionNew,
-		Source: RefOrOid{OID: commitD},
+		Action: MergeActionNew{Source: RefOrOid{OID: commitD}},
 	})
 	if err == nil {
 		t.Fatal("expected error for cherry-pick during unresolved conflict")
 	}
 
 	// can't continue cherry-pick with unresolved conflicts
-	_, err = repo.Merge(MergeInput{Kind: MergeKindPick, Action: MergeActionCont})
+	_, err = repo.Merge(MergeInput{Kind: MergeKindPick, Action: MergeActionCont{}})
 	if err == nil {
 		t.Fatal("expected error for continue with unresolved conflicts")
 	}
@@ -1411,18 +1397,18 @@ func TestCherryPickConflict(t *testing.T) {
 	addFile(t, repo, "readme.md", "e")
 
 	// can't continue with .kind = merge
-	_, err = repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont})
+	_, err = repo.Merge(MergeInput{Kind: MergeKindFull, Action: MergeActionCont{}})
 	if err == nil {
 		t.Fatal("expected error for continue with wrong merge kind")
 	}
 
 	// continue cherry-pick
-	result2, err := repo.Merge(MergeInput{Kind: MergeKindPick, Action: MergeActionCont})
+	result2, err := repo.Merge(MergeInput{Kind: MergeKindPick, Action: MergeActionCont{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result2.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", result2.Kind)
+	if _, ok := result2.(MergeResultSuccess); !ok {
+		t.Fatalf("expected success, got %v", result2)
 	}
 }
 
@@ -1474,16 +1460,16 @@ func TestLog(t *testing.T) {
 
 	mergeResult, err := repo.Merge(MergeInput{
 		Kind:   MergeKindFull,
-		Action: MergeActionNew,
-		Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}},
+		Action: MergeActionNew{Source: RefOrOid{IsRef: true, Ref: Ref{Kind: RefHead, Name: "foo"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mergeResult.Kind != MergeResultSuccess {
-		t.Fatalf("expected success, got %d", mergeResult.Kind)
+	mergeSuccess2, ok := mergeResult.(MergeResultSuccess)
+	if !ok {
+		t.Fatalf("expected success, got %v", mergeResult)
 	}
-	commitG := mergeResult.OID
+	commitG := mergeSuccess2.OID
 
 	addFile(t, repo, "master.md", "h")
 	commitH, err := repo.Commit(CommitMetadata{Message: "h"})
