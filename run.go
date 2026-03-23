@@ -30,7 +30,7 @@ var (
 
 func Run(opts RepoOpts, args []string, cwdPath string, runOpts RunOpts) error {
 	cmdArgs := parseCommandArgs(args)
-	d := newDispatch(cmdArgs)
+	d := newDispatch(cmdArgs, opts.Hash)
 
 	switch d := d.(type) {
 	case dispatchInvalidCommand:

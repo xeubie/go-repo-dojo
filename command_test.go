@@ -6,7 +6,7 @@ func TestCommand(t *testing.T) {
 	// "add" with no file args shows help
 	{
 		cmdArgs := parseCommandArgs([]string{"add", "--cli"})
-		d := newDispatch(cmdArgs)
+		d := newDispatch(cmdArgs, SHA1HashKind)
 		if _, ok := d.(dispatchHelp); !ok {
 			t.Fatalf("expected dispatchHelp, got %T", d)
 		}
@@ -15,7 +15,7 @@ func TestCommand(t *testing.T) {
 	// "add file.txt" is a valid CLI command
 	{
 		cmdArgs := parseCommandArgs([]string{"add", "file.txt"})
-		d := newDispatch(cmdArgs)
+		d := newDispatch(cmdArgs, SHA1HashKind)
 		cli, ok := d.(dispatchCLI)
 		if !ok {
 			t.Fatalf("expected dispatchCLI, got %T", d)
@@ -28,7 +28,7 @@ func TestCommand(t *testing.T) {
 	// "commit -m" without a value shows help
 	{
 		cmdArgs := parseCommandArgs([]string{"commit", "-m"})
-		d := newDispatch(cmdArgs)
+		d := newDispatch(cmdArgs, SHA1HashKind)
 		if _, ok := d.(dispatchHelp); !ok {
 			t.Fatalf("expected dispatchHelp, got %T", d)
 		}
@@ -37,7 +37,7 @@ func TestCommand(t *testing.T) {
 	// "commit -m 'message'" is a valid CLI command
 	{
 		cmdArgs := parseCommandArgs([]string{"commit", "-m", "let there be light"})
-		d := newDispatch(cmdArgs)
+		d := newDispatch(cmdArgs, SHA1HashKind)
 		cli, ok := d.(dispatchCLI)
 		if !ok {
 			t.Fatalf("expected dispatchCLI, got %T", d)
@@ -50,7 +50,7 @@ func TestCommand(t *testing.T) {
 	// extra config add args are joined
 	{
 		cmdArgs := parseCommandArgs([]string{"config", "add", "user.name", "radar", "roark"})
-		d := newDispatch(cmdArgs)
+		d := newDispatch(cmdArgs, SHA1HashKind)
 		cli, ok := d.(dispatchCLI)
 		if !ok {
 			t.Fatalf("expected dispatchCLI, got %T", d)
@@ -63,7 +63,7 @@ func TestCommand(t *testing.T) {
 	// invalid command
 	{
 		cmdArgs := parseCommandArgs([]string{"stats", "--clii"})
-		d := newDispatch(cmdArgs)
+		d := newDispatch(cmdArgs, SHA1HashKind)
 		inv, ok := d.(dispatchInvalidCommand)
 		if !ok {
 			t.Fatalf("expected dispatchInvalidCommand, got %T", d)
@@ -76,7 +76,7 @@ func TestCommand(t *testing.T) {
 	// invalid argument
 	{
 		cmdArgs := parseCommandArgs([]string{"status", "--clii"})
-		d := newDispatch(cmdArgs)
+		d := newDispatch(cmdArgs, SHA1HashKind)
 		inv, ok := d.(dispatchInvalidArgument)
 		if !ok {
 			t.Fatalf("expected dispatchInvalidArgument, got %T", d)

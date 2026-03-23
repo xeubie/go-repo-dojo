@@ -381,7 +381,7 @@ type configCommand struct {
 	Value   string // for add
 }
 
-func parseCommand(cmdArgs *commandArgs) *command {
+func parseCommand(cmdArgs *commandArgs, hashKind HashKind) *command {
 	if cmdArgs.commandKind == nil {
 		return nil
 	}
@@ -521,7 +521,7 @@ func parseCommand(cmdArgs *commandArgs) *command {
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1HashKind)
+		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], hashKind)
 		if target == nil {
 			return nil
 		}
@@ -534,7 +534,7 @@ func parseCommand(cmdArgs *commandArgs) *command {
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1HashKind)
+		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], hashKind)
 		if target == nil {
 			return nil
 		}
@@ -547,7 +547,7 @@ func parseCommand(cmdArgs *commandArgs) *command {
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1HashKind)
+		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], hashKind)
 		if target == nil {
 			return nil
 		}
@@ -560,7 +560,7 @@ func parseCommand(cmdArgs *commandArgs) *command {
 		if len(cmdArgs.PositionalArgs) != 1 {
 			return nil
 		}
-		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1HashKind)
+		target := refOrOidFromUser(cmdArgs.PositionalArgs[0], hashKind)
 		if target == nil {
 			return nil
 		}
@@ -583,7 +583,7 @@ func parseCommand(cmdArgs *commandArgs) *command {
 	case commandLog:
 		var targets []RefOrOid
 		for _, arg := range cmdArgs.PositionalArgs {
-			target := refOrOidFromUser(arg, SHA1HashKind)
+			target := refOrOidFromUser(arg, hashKind)
 			if target == nil {
 				return nil
 			}
@@ -615,7 +615,7 @@ func parseCommand(cmdArgs *commandArgs) *command {
 			if len(cmdArgs.PositionalArgs) != 1 {
 				return nil
 			}
-			source := refOrOidFromUser(cmdArgs.PositionalArgs[0], SHA1HashKind)
+			source := refOrOidFromUser(cmdArgs.PositionalArgs[0], hashKind)
 			if source == nil {
 				return nil
 			}
@@ -719,7 +719,7 @@ func (dispatchInvalidArgument) dispatch() {}
 func (dispatchHelp) dispatch()            {}
 func (dispatchCLI) dispatch()             {}
 
-func newDispatch(cmdArgs *commandArgs) dispatch {
+func newDispatch(cmdArgs *commandArgs, hashKind HashKind) dispatch {
 	showHelp := cmdArgs.Contains("--help")
 	cmdArgs.Contains("--cli") // consume it
 
@@ -727,7 +727,7 @@ func newDispatch(cmdArgs *commandArgs) dispatch {
 		if showHelp {
 			return dispatchHelp{HelpCmd: cmdArgs.commandKind}
 		}
-		if cmd := parseCommand(cmdArgs); cmd != nil {
+		if cmd := parseCommand(cmdArgs, hashKind); cmd != nil {
 			// check for unused args
 			for arg := range cmdArgs.UnusedArgs {
 				return dispatchInvalidArgument{
