@@ -123,7 +123,7 @@ func Simple(t *testing.T, store ObjectStore) {
 		if err != nil {
 			t.Fatalf("reset-dir to commit b failed: %v", err)
 		}
-		if !result.Success {
+		if _, ok := result.(SwitchSuccess); !ok {
 			t.Fatal("reset-dir to commit b was not successful")
 		}
 
@@ -146,7 +146,7 @@ func Simple(t *testing.T, store ObjectStore) {
 		if err != nil {
 			t.Fatalf("reset-dir to commit a failed: %v", err)
 		}
-		if !result.Success {
+		if _, ok := result.(SwitchSuccess); !ok {
 			t.Fatal("reset-dir to commit a was not successful")
 		}
 
@@ -169,7 +169,7 @@ func Simple(t *testing.T, store ObjectStore) {
 		if err != nil {
 			t.Fatalf("reset-dir to commit c failed: %v", err)
 		}
-		if !result.Success {
+		if _, ok := result.(SwitchSuccess); !ok {
 			t.Fatal("reset-dir to commit c was not successful")
 		}
 
@@ -195,7 +195,7 @@ func Simple(t *testing.T, store ObjectStore) {
 		if err != nil {
 			t.Fatalf("reset-dir to tag failed: %v", err)
 		}
-		if !result.Success {
+		if _, ok := result.(SwitchSuccess); !ok {
 			t.Fatal("reset-dir to tag was not successful")
 		}
 

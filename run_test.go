@@ -350,11 +350,12 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
 			}
-			if result.Success || result.Conflict == nil {
+			conflict, ok := result.(*SwitchConflict)
+			if !ok {
 				t.Fatal("expected conflict switching to commit1 with staged LICENSE")
 			}
-			if len(result.Conflict.StaleFiles) != 1 {
-				t.Fatalf("expected 1 stale file, got %d", len(result.Conflict.StaleFiles))
+			if len(conflict.StaleFiles) != 1 {
+				t.Fatalf("expected 1 stale file, got %d", len(conflict.StaleFiles))
 			}
 
 			// delete the file
@@ -381,7 +382,8 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
 			}
-			if result.Success || result.Conflict == nil {
+			_, ok := result.(*SwitchConflict)
+			if !ok {
 				t.Fatal("expected conflict switching to commit1 with docs file")
 			}
 
@@ -404,11 +406,12 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
 			}
-			if result.Success || result.Conflict == nil {
+			conflict, ok := result.(*SwitchConflict)
+			if !ok {
 				t.Fatal("expected conflict switching to commit1 with modified hello.txt")
 			}
-			if len(result.Conflict.StaleFiles) != 1 {
-				t.Fatalf("expected 1 stale file, got %d", len(result.Conflict.StaleFiles))
+			if len(conflict.StaleFiles) != 1 {
+				t.Fatalf("expected 1 stale file, got %d", len(conflict.StaleFiles))
 			}
 
 			// change the file back
@@ -435,11 +438,12 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
 			}
-			if result.Success || result.Conflict == nil {
+			conflict, ok := result.(*SwitchConflict)
+			if !ok {
 				t.Fatal("expected conflict switching to commit1 with LICENSE dir")
 			}
-			if len(result.Conflict.StaleDirs) != 1 {
-				t.Fatalf("expected 1 stale dir, got %d", len(result.Conflict.StaleDirs))
+			if len(conflict.StaleDirs) != 1 {
+				t.Fatalf("expected 1 stale dir, got %d", len(conflict.StaleDirs))
 			}
 
 			os.RemoveAll(filepath.Join(workPath, "LICENSE"))

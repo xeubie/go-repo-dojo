@@ -322,18 +322,18 @@ func runCommand(opts RepoOpts, cmd *command, cwdPath string, runOpts RunOpts) er
 		if err != nil {
 			return err
 		}
-		if !result.Success && result.Conflict != nil {
+		if conflict, ok := result.(*SwitchConflict); ok {
 			fmt.Fprintf(runOpts.Err, "conflicts detected in the following file paths:\n")
-			for _, p := range result.Conflict.StaleFiles {
+			for _, p := range conflict.StaleFiles {
 				fmt.Fprintf(runOpts.Err, "  %s\n", p)
 			}
-			for _, p := range result.Conflict.StaleDirs {
+			for _, p := range conflict.StaleDirs {
 				fmt.Fprintf(runOpts.Err, "  %s\n", p)
 			}
-			for _, p := range result.Conflict.UntrackedOverwritten {
+			for _, p := range conflict.UntrackedOverwritten {
 				fmt.Fprintf(runOpts.Err, "  %s\n", p)
 			}
-			for _, p := range result.Conflict.UntrackedRemoved {
+			for _, p := range conflict.UntrackedRemoved {
 				fmt.Fprintf(runOpts.Err, "  %s\n", p)
 			}
 			fmt.Fprintf(runOpts.Err, "if you really want to continue, throw caution into the wind by adding the -f flag\n")

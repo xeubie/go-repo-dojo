@@ -677,14 +677,19 @@ type SwitchConflict struct {
 }
 
 // SwitchResult is the outcome of a switch operation.
-type SwitchResult struct {
-	Success  bool
-	Conflict *SwitchConflict
+type SwitchResult interface {
+	switchResult()
 }
+
+// SwitchSuccess indicates a successful switch.
+type SwitchSuccess struct{}
+
+func (SwitchSuccess) switchResult()    {}
+func (*SwitchConflict) switchResult() {}
 
 // migrate applies tree diff changes to the index and optionally the work dir.
 // If result is non-nil, conflicts are checked and recorded rather than applied.
-func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkDir bool, result *SwitchResult) error {
+func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkDir bool, result *SwitchConflict) error {
 	addFiles := make(map[string]TreeEntry)
 	removeFiles := make(map[string]bool)
 
@@ -712,7 +717,7 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkD
 			oldDiffersFromIndex := treeEntryDiffersFromIndex(change.Old, indexEntry)
 			newDiffersFromIndex := treeEntryDiffersFromIndex(change.New, indexEntry)
 			if oldDiffersFromIndex && newDiffersFromIndex {
-				result.Conflict.StaleFiles = append(result.Conflict.StaleFiles, path)
+				result.StaleFiles = append(result.StaleFiles, path)
 				continue
 			}
 
@@ -721,11 +726,11 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkD
 			if statErr != nil {
 				if repo.untrackedParent(path, idx) {
 					if indexEntry != nil {
-						result.Conflict.StaleFiles = append(result.Conflict.StaleFiles, path)
+						result.StaleFiles = append(result.StaleFiles, path)
 					} else if change.New != nil {
-						result.Conflict.UntrackedOverwritten = append(result.Conflict.UntrackedOverwritten, path)
+						result.UntrackedOverwritten = append(result.UntrackedOverwritten, path)
 					} else {
-						result.Conflict.UntrackedRemoved = append(result.Conflict.UntrackedRemoved, path)
+						result.UntrackedRemoved = append(result.UntrackedRemoved, path)
 					}
 				}
 				continue
@@ -734,22 +739,22 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkD
 			if info.IsDir() {
 				if repo.untrackedFile(fullPath, path, idx) {
 					if indexEntry != nil {
-						result.Conflict.StaleFiles = append(result.Conflict.StaleFiles, path)
+						result.StaleFiles = append(result.StaleFiles, path)
 					} else {
-						result.Conflict.StaleDirs = append(result.Conflict.StaleDirs, path)
+						result.StaleDirs = append(result.StaleDirs, path)
 					}
 				}
 			} else {
 				if indexEntry != nil {
 					differs, err := repo.indexDiffersFromWorkDir(indexEntry, fullPath)
 					if err == nil && differs {
-						result.Conflict.StaleFiles = append(result.Conflict.StaleFiles, path)
+						result.StaleFiles = append(result.StaleFiles, path)
 					}
 				} else {
 					if change.New != nil {
-						result.Conflict.UntrackedOverwritten = append(result.Conflict.UntrackedOverwritten, path)
+						result.UntrackedOverwritten = append(result.UntrackedOverwritten, path)
 					} else {
-						result.Conflict.UntrackedRemoved = append(result.Conflict.UntrackedRemoved, path)
+						result.UntrackedRemoved = append(result.UntrackedRemoved, path)
 					}
 				}
 			}
@@ -764,7 +769,7 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkD
 			continue
 			// we can't switch if there is an unresolved merge conflict
 		} else if result != nil {
-			result.Conflict.StaleFiles = append(result.Conflict.StaleFiles, path)
+			result.StaleFiles = append(result.StaleFiles, path)
 			// if we are using -f, and the conflicting file isn't being removed,
 			// just add it so the index is updated (making it non-conflicting)
 			// and the work dir is (optionally) updated
@@ -816,7 +821,7 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkD
 }
 
 // Switches HEAD, the index, and optionally the working directory to a new target.
-func (repo *Repo) Switch(input SwitchInput) (*SwitchResult, error) {
+func (repo *Repo) Switch(input SwitchInput) (SwitchResult, error) {
 	// resolve current OID
 	currentOID, _ := repo.ReadHeadRecurMaybe()
 
@@ -842,19 +847,17 @@ func (repo *Repo) Switch(input SwitchInput) (*SwitchResult, error) {
 	}
 
 	// check for conflicts (unless force)
-	var result *SwitchResult
+	var conflict *SwitchConflict
 	if !input.Force {
-		result = &SwitchResult{
-			Conflict: &SwitchConflict{},
-		}
+		conflict = &SwitchConflict{}
 	}
 
-	if err := repo.migrate(changes, idx, input.UpdateWorkDir, result); err != nil {
+	if err := repo.migrate(changes, idx, input.UpdateWorkDir, conflict); err != nil {
 		return nil, err
 	}
 
-	if result != nil && result.hasConflict() {
-		return result, nil
+	if conflict != nil && conflict.hasConflict() {
+		return conflict, nil
 	}
 
 	// write index
@@ -887,14 +890,10 @@ func (repo *Repo) Switch(input SwitchInput) (*SwitchResult, error) {
 		removeMergeState(repo)
 	}
 
-	return &SwitchResult{Success: true}, nil
+	return SwitchSuccess{}, nil
 }
 
-func (r *SwitchResult) hasConflict() bool {
-	if r.Conflict == nil {
-		return false
-	}
-	c := r.Conflict
+func (c *SwitchConflict) hasConflict() bool {
 	return len(c.StaleFiles) > 0 || len(c.StaleDirs) > 0 || len(c.UntrackedOverwritten) > 0 || len(c.UntrackedRemoved) > 0
 }
 
