@@ -687,6 +687,10 @@ type SwitchSuccess struct{}
 func (SwitchSuccess) switchResult()    {}
 func (*SwitchConflict) switchResult() {}
 
+type SwitchOutput struct {
+	Result SwitchResult
+}
+
 // migrate applies tree diff changes to the index and optionally the work dir.
 // If result is non-nil, conflicts are checked and recorded rather than applied.
 func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkDir bool, result *SwitchConflict) error {
@@ -821,7 +825,7 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkD
 }
 
 // Switches HEAD, the index, and optionally the working directory to a new target.
-func (repo *Repo) Switch(input SwitchInput) (SwitchResult, error) {
+func (repo *Repo) Switch(input SwitchInput) (*SwitchOutput, error) {
 	// resolve current OID
 	currentOID, _ := repo.ReadHeadRecurMaybe()
 
@@ -857,7 +861,7 @@ func (repo *Repo) Switch(input SwitchInput) (SwitchResult, error) {
 	}
 
 	if conflict != nil && conflict.hasConflict() {
-		return conflict, nil
+		return &SwitchOutput{Result: conflict}, nil
 	}
 
 	// write index
@@ -890,7 +894,7 @@ func (repo *Repo) Switch(input SwitchInput) (SwitchResult, error) {
 		removeMergeState(repo)
 	}
 
-	return SwitchSuccess{}, nil
+	return &SwitchOutput{Result: SwitchSuccess{}}, nil
 }
 
 func (c *SwitchConflict) hasConflict() bool {

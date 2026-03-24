@@ -350,7 +350,7 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
 			}
-			conflict, ok := result.(*SwitchConflict)
+			conflict, ok := result.Result.(*SwitchConflict)
 			if !ok {
 				t.Fatal("expected conflict switching to commit1 with staged LICENSE")
 			}
@@ -382,7 +382,7 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
 			}
-			_, ok := result.(*SwitchConflict)
+			_, ok := result.Result.(*SwitchConflict)
 			if !ok {
 				t.Fatal("expected conflict switching to commit1 with docs file")
 			}
@@ -406,7 +406,7 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
 			}
-			conflict, ok := result.(*SwitchConflict)
+			conflict, ok := result.Result.(*SwitchConflict)
 			if !ok {
 				t.Fatal("expected conflict switching to commit1 with modified hello.txt")
 			}
@@ -438,7 +438,7 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
 			}
-			conflict, ok := result.(*SwitchConflict)
+			conflict, ok := result.Result.(*SwitchConflict)
 			if !ok {
 				t.Fatal("expected conflict switching to commit1 with LICENSE dir")
 			}

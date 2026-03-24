@@ -322,7 +322,7 @@ func runCommand(opts RepoOpts, cmd *command, cwdPath string, runOpts RunOpts) er
 		if err != nil {
 			return err
 		}
-		if conflict, ok := result.(*SwitchConflict); ok {
+		if conflict, ok := result.Result.(*SwitchConflict); ok {
 			fmt.Fprintf(runOpts.Err, "conflicts detected in the following file paths:\n")
 			for _, p := range conflict.StaleFiles {
 				fmt.Fprintf(runOpts.Err, "  %s\n", p)
