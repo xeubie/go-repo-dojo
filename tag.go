@@ -16,6 +16,7 @@ type RemoveTagInput struct {
 	Name string
 }
 
+// Creates an annotated tag object pointing at HEAD and returns its OID.
 func (repo *Repo) AddTag(input AddTagInput) (Hash, error) {
 	if !validateRefName(input.Name) {
 		return nil, errors.New("invalid tag name")
@@ -42,6 +43,7 @@ func (repo *Repo) AddTag(input AddTagInput) (Hash, error) {
 	return tagOID, nil
 }
 
+// Deletes a tag ref by name.
 func (repo *Repo) RemoveTag(input RemoveTagInput) error {
 	tagsDir := filepath.Join(repo.repoPath, "refs", "tags")
 
@@ -61,6 +63,7 @@ func (repo *Repo) RemoveTag(input RemoveTagInput) error {
 	return nil
 }
 
+// Returns an iterator over all tags.
 func (repo *Repo) ListTags() (*RefIterator, error) {
 	tagsDir := filepath.Join(repo.repoPath, "refs", "tags")
 	return newRefIterator(tagsDir, RefTag)

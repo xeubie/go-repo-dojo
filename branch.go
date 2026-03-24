@@ -23,6 +23,7 @@ func validateBranchName(name string) bool {
 	return validateRefName(name) && name != "HEAD"
 }
 
+// Creates a new branch pointing at the current HEAD commit.
 func (repo *Repo) AddBranch(input AddBranchInput) error {
 	if !validateBranchName(input.Name) {
 		return errors.New("invalid branch name")
@@ -60,6 +61,7 @@ func (repo *Repo) AddBranch(input AddBranchInput) error {
 	return nil
 }
 
+// Deletes a branch by name.
 func (repo *Repo) RemoveBranch(input RemoveBranchInput) error {
 	// don't allow current branch to be deleted
 	currentRef, err := repo.readRef("HEAD")
@@ -87,6 +89,7 @@ func (repo *Repo) RemoveBranch(input RemoveBranchInput) error {
 	return nil
 }
 
+// Returns an iterator over all branches.
 func (repo *Repo) ListBranches() (*RefIterator, error) {
 	headsDir := filepath.Join(repo.repoPath, "refs", "heads")
 	return newRefIterator(headsDir, RefHead)

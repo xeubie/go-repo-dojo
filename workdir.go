@@ -27,6 +27,7 @@ type Status struct {
 	ResolvedConflicts   map[string]TreeEntry
 }
 
+// Returns the working directory and index status relative to HEAD.
 func (repo *Repo) Status() (*Status, error) {
 	idx, err := repo.readIndex()
 	if err != nil {
