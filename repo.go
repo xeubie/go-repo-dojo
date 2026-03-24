@@ -313,6 +313,26 @@ func (r *Repo) Head() (RefOrOid, error) {
 	return result, nil
 }
 
+// Resets HEAD and the index to the target without updating the working directory.
+func (r *Repo) Reset(input ResetInput) (*SwitchOutput, error) {
+	return r.Switch(SwitchInput{
+		Kind:          SwitchKindReset,
+		Target:        input.Target,
+		UpdateWorkDir: false,
+		Force:         input.Force,
+	})
+}
+
+// Resets HEAD, the index, and the working directory to the target.
+func (r *Repo) ResetDir(input ResetInput) (*SwitchOutput, error) {
+	return r.Switch(SwitchInput{
+		Kind:          SwitchKindReset,
+		Target:        input.Target,
+		UpdateWorkDir: true,
+		Force:         input.Force,
+	})
+}
+
 // Points HEAD at the given ref or OID without modifying the index or working directory.
 func (r *Repo) ResetAdd(target RefOrOid) error {
 	switch v := target.(type) {

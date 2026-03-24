@@ -660,6 +660,11 @@ const (
 	SwitchKindReset
 )
 
+type ResetInput struct {
+	Target RefOrOid
+	Force  bool
+}
+
 // SwitchInput holds the parameters for a switch/reset operation.
 type SwitchInput struct {
 	Kind          SwitchKind
