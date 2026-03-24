@@ -814,8 +814,8 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkD
 	return nil
 }
 
-// switchDir switches the working directory, index, and HEAD to a new target.
-func (repo *Repo) switchDir(input SwitchInput) (*SwitchResult, error) {
+// Switches HEAD, the index, and optionally the working directory to a new target.
+func (repo *Repo) Switch(input SwitchInput) (*SwitchResult, error) {
 	// resolve current OID
 	currentOID, _ := repo.ReadHeadRecurMaybe()
 

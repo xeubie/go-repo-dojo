@@ -325,11 +325,6 @@ func (r *Repo) ResetAdd(target RefOrOid) error {
 	return nil
 }
 
-// Switches HEAD, the index, and optionally the working directory to a new target.
-func (r *Repo) Switch(input SwitchInput) (*SwitchResult, error) {
-	return r.switchDir(input)
-}
-
 // Returns an iterator over commits reachable from the given OIDs, or from HEAD if none are given.
 func (r *Repo) Log(startOIDs []Hash) (*ObjectIterator, error) {
 	iter := r.NewObjectIterator(ObjectIteratorOptions{Kind: ObjectIterCommit})
