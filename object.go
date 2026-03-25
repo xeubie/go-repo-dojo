@@ -74,8 +74,7 @@ func parseObjectHeader(data []byte) (ObjectHeader, int, error) {
 	}
 	nullIdx += spaceIdx + 1
 
-	var size uint64
-	_, err = fmt.Sscanf(string(data[spaceIdx+1:nullIdx]), "%d", &size)
+	size, err := strconv.ParseUint(string(data[spaceIdx+1:nullIdx]), 10, 64)
 	if err != nil {
 		return ObjectHeader{}, 0, fmt.Errorf("invalid object size: %w", err)
 	}
