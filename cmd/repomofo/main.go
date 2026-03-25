@@ -27,9 +27,9 @@ func main() {
 	}
 
 	if err := repomofo.RunPrint(opts, args, cwdPath, runOpts); err != nil {
-		if errors.Is(err, repomofo.ErrHandled) {
-			os.Exit(1)
+		if !errors.Is(err, repomofo.ErrHandled) {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		}
-		panic(err)
+		os.Exit(1)
 	}
 }
