@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"sync"
 )
 
 // memoryObjectStore is an in-memory implementation of ObjectStore.
 // It stores git objects in a map keyed by hex OID.
 type memoryObjectStore struct {
-	mu      sync.RWMutex
 	objects map[string][]byte // oidHex → raw object data (header + content)
 	hash    HashKind
 }
@@ -37,17 +35,12 @@ func (s *memoryObjectStore) WriteObject(header ObjectHeader, reader io.Reader) (
 	oidBytes := hasher.Sum(nil)
 	oid := s.hash.HashFromBytes(oidBytes)
 
-	s.mu.Lock()
 	s.objects[oid.Hex()] = data
-	s.mu.Unlock()
-
 	return oid, nil
 }
 
 func (s *memoryObjectStore) ReadObject(oid Hash) (ObjectReader, error) {
-	s.mu.RLock()
 	data, ok := s.objects[oid.Hex()]
-	s.mu.RUnlock()
 	if !ok {
 		return nil, ErrObjectNotFound
 	}
