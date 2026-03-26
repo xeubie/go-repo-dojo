@@ -105,7 +105,7 @@ func OpenRepo(workPath string, opts RepoOpts) (*Repo, error) {
 	}
 }
 
-// Adds or updates a configuration entry.
+// AddConfig adds or updates a configuration entry.
 func (r *Repo) AddConfig(input AddConfigInput) error {
 	config, err := r.loadConfig()
 	if err != nil {
@@ -130,7 +130,7 @@ func (r *Repo) AddConfig(input AddConfigInput) error {
 	return nil
 }
 
-// Removes a configuration entry.
+// RemoveConfig removes a configuration entry.
 func (r *Repo) RemoveConfig(input RemoveConfigInput) error {
 	config, err := r.loadConfig()
 	if err != nil {
@@ -155,12 +155,12 @@ func (r *Repo) RemoveConfig(input RemoveConfigInput) error {
 	return nil
 }
 
-// Returns the full parsed configuration.
+// ListConfig returns the full parsed configuration.
 func (r *Repo) ListConfig() (*Config, error) {
 	return r.loadConfig()
 }
 
-// Registers a new remote with the given name and URL.
+// AddRemote registers a new remote with the given name and URL.
 func (r *Repo) AddRemote(name, url string) error {
 	config, err := r.loadConfig()
 	if err != nil {
@@ -195,7 +195,7 @@ func (r *Repo) AddRemote(name, url string) error {
 	return nil
 }
 
-// Deletes a remote and its fetch config by name.
+// RemoveRemote deletes a remote and its fetch config by name.
 func (r *Repo) RemoveRemote(name string) error {
 	config, err := r.loadConfig()
 	if err != nil {
@@ -228,7 +228,7 @@ func (r *Repo) RemoveRemote(name string) error {
 	return nil
 }
 
-// Returns configuration entries for all remotes.
+// ListRemotes returns configuration entries for all remotes.
 func (r *Repo) ListRemotes() (*Config, error) {
 	config, err := r.loadConfig()
 	if err != nil {
@@ -247,7 +247,7 @@ func (r *Repo) ListRemotes() (*Config, error) {
 	return result, nil
 }
 
-// Stages the given file paths in the index.
+// Add stages the given file paths in the index.
 func (r *Repo) Add(paths []string) error {
 	normalized, err := normalizePaths(r.workPath, paths)
 	if err != nil {
@@ -256,7 +256,7 @@ func (r *Repo) Add(paths []string) error {
 	return r.addPaths(normalized)
 }
 
-// Unstages the given paths, restoring their index entries from HEAD.
+// Unadd unstages the given paths, restoring their index entries from HEAD.
 func (r *Repo) Unadd(paths []string, opts UnaddOptions) error {
 	normalized, err := normalizePaths(r.workPath, paths)
 	if err != nil {
@@ -265,7 +265,7 @@ func (r *Repo) Unadd(paths []string, opts UnaddOptions) error {
 	return r.unaddPaths(normalized, opts)
 }
 
-// Removes the given paths from the index without deleting them from the working directory.
+// Untrack removes the given paths from the index without deleting them from the working directory.
 func (r *Repo) Untrack(paths []string, opts UntrackOptions) error {
 	normalized, err := normalizePaths(r.workPath, paths)
 	if err != nil {
@@ -277,7 +277,7 @@ func (r *Repo) Untrack(paths []string, opts UntrackOptions) error {
 	})
 }
 
-// Removes the given paths from the index and optionally from the working directory.
+// Remove removes the given paths from the index and the working directory.
 func (r *Repo) Remove(paths []string, opts RemoveOptions) error {
 	normalized, err := normalizePaths(r.workPath, paths)
 	if err != nil {
@@ -290,12 +290,12 @@ func (r *Repo) Remove(paths []string, opts RemoveOptions) error {
 	})
 }
 
-// Creates a new commit from the current index and returns its OID.
+// Commit creates a new commit from the current index and returns its OID.
 func (r *Repo) Commit(metadata CommitMetadata) (Hash, error) {
 	return r.writeCommit(metadata)
 }
 
-// Restores a file in the working directory to its HEAD tree content.
+// Restore restores a file in the working directory to its HEAD tree content.
 func (r *Repo) Restore(path string) error {
 	rel, err := relativePath(r.workPath, path)
 	if err != nil {
@@ -304,7 +304,7 @@ func (r *Repo) Restore(path string) error {
 	return r.restore(joinPath(splitPath(rel)))
 }
 
-// Returns what HEAD currently points to — either a branch ref or a detached OID.
+// Head returns what HEAD currently points to, either a branch ref or a detached OID.
 func (r *Repo) Head() (RefOrOid, error) {
 	result, err := r.readRef("HEAD")
 	if err != nil {
@@ -316,7 +316,7 @@ func (r *Repo) Head() (RefOrOid, error) {
 	return result, nil
 }
 
-// Switches HEAD, the index, and the working directory to a new target.
+// Switch switches HEAD, the index, and the working directory to a new target.
 func (r *Repo) Switch(input SwitchInput) (*SwitchOutput, error) {
 	return r.switchDir(switchInput{
 		Kind:          SwitchKindSwitch,
@@ -326,7 +326,7 @@ func (r *Repo) Switch(input SwitchInput) (*SwitchOutput, error) {
 	})
 }
 
-// Resets HEAD and the index to the target without updating the working directory.
+// Reset resets HEAD and the index to the target without updating the working directory.
 func (r *Repo) Reset(input ResetInput) (*SwitchOutput, error) {
 	return r.switchDir(switchInput{
 		Kind:   SwitchKindReset,
@@ -335,7 +335,7 @@ func (r *Repo) Reset(input ResetInput) (*SwitchOutput, error) {
 	})
 }
 
-// Resets HEAD, the index, and the working directory to the target.
+// ResetDir resets HEAD, the index, and the working directory to the target.
 func (r *Repo) ResetDir(input ResetInput) (*SwitchOutput, error) {
 	return r.switchDir(switchInput{
 		Kind:          SwitchKindReset,
@@ -345,7 +345,7 @@ func (r *Repo) ResetDir(input ResetInput) (*SwitchOutput, error) {
 	})
 }
 
-// Points HEAD at the given ref or OID without modifying the index or working directory.
+// ResetAdd points HEAD at the given ref or OID without modifying the index or working directory.
 func (r *Repo) ResetAdd(target RefOrOid) error {
 	switch v := target.(type) {
 	case RefValue:
@@ -357,7 +357,7 @@ func (r *Repo) ResetAdd(target RefOrOid) error {
 	return nil
 }
 
-// Returns an iterator over commits reachable from the given OIDs, or from HEAD if none are given.
+// Log returns an iterator over commits reachable from the given OIDs, or from HEAD if none are given.
 func (r *Repo) Log(startOIDs []Hash) (*ObjectIterator, error) {
 	iter := r.NewObjectIterator(ObjectIteratorOptions{Kind: ObjectIterCommit})
 
