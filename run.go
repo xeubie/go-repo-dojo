@@ -303,9 +303,9 @@ func runCommand(opts RepoOpts, cmd *command, cwdPath string, runOpts RunOpts) er
 		}
 
 	case commandSwitchDir, commandReset, commandResetDir:
-		kind := SwitchKindSwitch
+		kind := switchKindSwitch
 		if cmd.Kind != commandSwitchDir {
-			kind = SwitchKindReset
+			kind = switchKindReset
 		}
 		preserveWorkDir := cmd.Kind == commandReset
 

@@ -666,12 +666,12 @@ func (repo *Repo) untrackedParent(path string, idx *index) bool {
 	return false
 }
 
-// SwitchKind differentiates between switch and reset.
-type SwitchKind int
+// switchKind differentiates between switch and reset.
+type switchKind int
 
 const (
-	SwitchKindSwitch SwitchKind = iota
-	SwitchKindReset
+	switchKindSwitch switchKind = iota
+	switchKindReset
 )
 
 type SwitchInput struct {
@@ -680,7 +680,7 @@ type SwitchInput struct {
 }
 
 type switchInput struct {
-	Kind          SwitchKind
+	Kind          switchKind
 	Target        RefOrOid
 	UpdateWorkDir bool
 	Force         bool
@@ -895,11 +895,11 @@ func (repo *Repo) switchDir(input switchInput) (*Switch, error) {
 
 	// update HEAD
 	switch input.Kind {
-	case SwitchKindSwitch:
+	case switchKindSwitch:
 		if err := repo.replaceHead(input.Target); err != nil {
 			return nil, err
 		}
-	case SwitchKindReset:
+	case switchKindReset:
 		if err := repo.updateHead(targetOID); err != nil {
 			return nil, err
 		}
