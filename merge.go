@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -466,7 +467,7 @@ func (s *diff3Stream) readStep(buf []byte) (int, error) {
 		sourceLines := linesFromRange(s.sourceIter, chunk.BRange)
 
 		// auto-resolve: if base == target or target == source, use source
-		if sliceEqual(baseLines, targetLines) || sliceEqual(targetLines, sourceLines) {
+		if slices.Equal(baseLines, targetLines) || slices.Equal(targetLines, sourceLines) {
 			s.lineBuffer = append(s.lineBuffer, sourceLines...)
 			if len(s.lineBuffer) > 0 {
 				s.currentLine = &s.lineBuffer[0]
@@ -474,7 +475,7 @@ func (s *diff3Stream) readStep(buf []byte) (int, error) {
 			return s.readStep(buf)
 		}
 		// auto-resolve: if base == source, use target
-		if sliceEqual(baseLines, sourceLines) {
+		if slices.Equal(baseLines, sourceLines) {
 			s.lineBuffer = append(s.lineBuffer, targetLines...)
 			if len(s.lineBuffer) > 0 {
 				s.currentLine = &s.lineBuffer[0]
@@ -544,17 +545,6 @@ func linesFromRange(iter *lineIterator, r *diff3Range) []string {
 	return lines
 }
 
-func sliceEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
 
 // ---------------------------------------------------------------------------
 // samePathConflict

@@ -4,9 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -205,25 +206,25 @@ func runCommand(opts RepoOpts, cmd *command, cwdPath string, runOpts RunOpts) er
 			return err
 		}
 
-		for _, path := range sortedKeys(st.Untracked) {
+		for _, path := range slices.Sorted(maps.Keys(st.Untracked)) {
 			fmt.Fprintf(runOpts.Out, "?? %s\n", path)
 		}
-		for _, path := range sortedKeys(st.WorkDirModified) {
+		for _, path := range slices.Sorted(maps.Keys(st.WorkDirModified)) {
 			fmt.Fprintf(runOpts.Out, " M %s\n", path)
 		}
-		for _, path := range sortedKeys(st.WorkDirDeleted) {
+		for _, path := range slices.Sorted(maps.Keys(st.WorkDirDeleted)) {
 			fmt.Fprintf(runOpts.Out, " D %s\n", path)
 		}
-		for _, path := range sortedKeys(st.IndexAdded) {
+		for _, path := range slices.Sorted(maps.Keys(st.IndexAdded)) {
 			fmt.Fprintf(runOpts.Out, "A  %s\n", path)
 		}
-		for _, path := range sortedKeys(st.IndexModified) {
+		for _, path := range slices.Sorted(maps.Keys(st.IndexModified)) {
 			fmt.Fprintf(runOpts.Out, "M  %s\n", path)
 		}
-		for _, path := range sortedKeys(st.IndexDeleted) {
+		for _, path := range slices.Sorted(maps.Keys(st.IndexDeleted)) {
 			fmt.Fprintf(runOpts.Out, "D  %s\n", path)
 		}
-		for _, path := range sortedKeys(st.UnresolvedConflicts) {
+		for _, path := range slices.Sorted(maps.Keys(st.UnresolvedConflicts)) {
 			c := st.UnresolvedConflicts[path]
 			var code string
 			if c.Base {
@@ -634,11 +635,3 @@ func detectProtocolVersion() int {
 	return version
 }
 
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
