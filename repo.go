@@ -317,7 +317,7 @@ func (r *Repo) Head() (RefOrOid, error) {
 }
 
 // Switch switches HEAD, the index, and the working directory to a new target.
-func (r *Repo) Switch(input SwitchInput) (*SwitchOutput, error) {
+func (r *Repo) Switch(input SwitchInput) (*Switch, error) {
 	return r.switchDir(switchInput{
 		Kind:          SwitchKindSwitch,
 		Target:        input.Target,
@@ -327,7 +327,7 @@ func (r *Repo) Switch(input SwitchInput) (*SwitchOutput, error) {
 }
 
 // Reset resets HEAD and the index to the target without updating the working directory.
-func (r *Repo) Reset(input SwitchInput) (*SwitchOutput, error) {
+func (r *Repo) Reset(input SwitchInput) (*Switch, error) {
 	return r.switchDir(switchInput{
 		Kind:   SwitchKindReset,
 		Target: input.Target,
@@ -336,7 +336,7 @@ func (r *Repo) Reset(input SwitchInput) (*SwitchOutput, error) {
 }
 
 // ResetDir resets HEAD, the index, and the working directory to the target.
-func (r *Repo) ResetDir(input SwitchInput) (*SwitchOutput, error) {
+func (r *Repo) ResetDir(input SwitchInput) (*Switch, error) {
 	return r.switchDir(switchInput{
 		Kind:          SwitchKindReset,
 		Target:        input.Target,
