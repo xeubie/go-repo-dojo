@@ -271,10 +271,9 @@ func (r *Repo) Untrack(paths []string, opts UntrackOptions) error {
 	if err != nil {
 		return err
 	}
-	return r.removePaths(normalized, RemoveOptions{
-		Force:           opts.Force,
-		Recursive:       opts.Recursive,
-		SkipWorkDir: true,
+	return r.removePaths(normalized, removeOptions{
+		Force:     opts.Force,
+		Recursive: opts.Recursive,
 	})
 }
 
@@ -284,7 +283,11 @@ func (r *Repo) Remove(paths []string, opts RemoveOptions) error {
 	if err != nil {
 		return err
 	}
-	return r.removePaths(normalized, opts)
+	return r.removePaths(normalized, removeOptions{
+		Force:         opts.Force,
+		Recursive:     opts.Recursive,
+		UpdateWorkDir: true,
+	})
 }
 
 // Creates a new commit from the current index and returns its OID.
@@ -313,22 +316,32 @@ func (r *Repo) Head() (RefOrOid, error) {
 	return result, nil
 }
 
+// Switches HEAD, the index, and the working directory to a new target.
+func (r *Repo) Switch(input SwitchInput) (*SwitchOutput, error) {
+	return r.switchDir(switchInput{
+		Kind:          SwitchKindSwitch,
+		Target:        input.Target,
+		UpdateWorkDir: true,
+		Force:         input.Force,
+	})
+}
+
 // Resets HEAD and the index to the target without updating the working directory.
 func (r *Repo) Reset(input ResetInput) (*SwitchOutput, error) {
-	return r.Switch(SwitchInput{
-		Kind:            SwitchKindReset,
-		Target:          input.Target,
-		SkipWorkDir: true,
-		Force:           input.Force,
+	return r.switchDir(switchInput{
+		Kind:   SwitchKindReset,
+		Target: input.Target,
+		Force:  input.Force,
 	})
 }
 
 // Resets HEAD, the index, and the working directory to the target.
 func (r *Repo) ResetDir(input ResetInput) (*SwitchOutput, error) {
-	return r.Switch(SwitchInput{
-		Kind:   SwitchKindReset,
-		Target: input.Target,
-		Force:  input.Force,
+	return r.switchDir(switchInput{
+		Kind:          SwitchKindReset,
+		Target:        input.Target,
+		UpdateWorkDir: true,
+		Force:         input.Force,
 	})
 }
 

@@ -343,7 +343,6 @@ func TestRun(t *testing.T) {
 				t.Fatalf("open repo failed: %v", err)
 			}
 			result, err := repo.Switch(SwitchInput{
-				Kind:          SwitchKindSwitch,
 				Target:        OIDValue{OID: commit1},
 	
 			})
@@ -375,7 +374,6 @@ func TestRun(t *testing.T) {
 				t.Fatalf("open repo failed: %v", err)
 			}
 			result, err := repo.Switch(SwitchInput{
-				Kind:          SwitchKindSwitch,
 				Target:        OIDValue{OID: commit1},
 	
 			})
@@ -399,7 +397,6 @@ func TestRun(t *testing.T) {
 				t.Fatalf("open repo failed: %v", err)
 			}
 			result, err := repo.Switch(SwitchInput{
-				Kind:          SwitchKindSwitch,
 				Target:        OIDValue{OID: commit1},
 	
 			})
@@ -431,7 +428,6 @@ func TestRun(t *testing.T) {
 				t.Fatalf("open repo failed: %v", err)
 			}
 			result, err := repo.Switch(SwitchInput{
-				Kind:          SwitchKindSwitch,
 				Target:        OIDValue{OID: commit1},
 	
 			})

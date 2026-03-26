@@ -223,9 +223,14 @@ type UntrackOptions struct {
 }
 
 type RemoveOptions struct {
-	Force           bool
-	Recursive       bool
-	SkipWorkDir bool
+	Force     bool
+	Recursive bool
+}
+
+type removeOptions struct {
+	Force         bool
+	Recursive     bool
+	UpdateWorkDir bool
 }
 
 // indexDiffersFromWorkDir checks if the work dir file differs from the index entry.
@@ -349,7 +354,7 @@ func (repo *Repo) unaddPaths(paths []string, opts UnaddOptions) error {
 }
 
 // removePaths removes paths from the index and optionally from the work dir.
-func (repo *Repo) removePaths(paths []string, opts RemoveOptions) error {
+func (repo *Repo) removePaths(paths []string, opts removeOptions) error {
 	idx, err := repo.readIndex()
 	if err != nil {
 		return err
@@ -406,16 +411,16 @@ func (repo *Repo) removePaths(paths []string, opts RemoveOptions) error {
 
 			if differsFromHead && differsFromWorkDir {
 				return ErrCannotRemoveFileWithStagedAndUnstagedChanges
-			} else if differsFromHead && !opts.SkipWorkDir {
+			} else if differsFromHead && opts.UpdateWorkDir {
 				return ErrCannotRemoveFileWithStagedChanges
-			} else if differsFromWorkDir && !opts.SkipWorkDir {
+			} else if differsFromWorkDir && opts.UpdateWorkDir {
 				return ErrCannotRemoveFileWithUnstagedChanges
 			}
 		}
 	}
 
 	// remove files from work dir
-	if !opts.SkipWorkDir {
+	if opts.UpdateWorkDir {
 		for p := range removedPaths {
 			fullPath := filepath.Join(repo.workPath, p)
 			os.Remove(fullPath)
@@ -672,12 +677,16 @@ type ResetInput struct {
 	Force  bool
 }
 
-// SwitchInput holds the parameters for a switch/reset operation.
 type SwitchInput struct {
-	Kind            SwitchKind
-	Target          RefOrOid // the branch or OID to switch to
-	SkipWorkDir bool
-	Force           bool
+	Target RefOrOid
+	Force  bool
+}
+
+type switchInput struct {
+	Kind          SwitchKind
+	Target        RefOrOid
+	UpdateWorkDir bool
+	Force         bool
 }
 
 // SwitchConflict holds paths that conflict with the switch.
@@ -836,8 +845,8 @@ func (repo *Repo) migrate(changes map[string]TreeChange, idx *index, updateWorkD
 	return nil
 }
 
-// Switches HEAD, the index, and optionally the working directory to a new target.
-func (repo *Repo) Switch(input SwitchInput) (*SwitchOutput, error) {
+// switchDir switches HEAD, the index, and optionally the working directory to a new target.
+func (repo *Repo) switchDir(input switchInput) (*SwitchOutput, error) {
 	// resolve current OID
 	currentOID, _ := repo.ReadHeadRecurMaybe()
 
@@ -868,7 +877,7 @@ func (repo *Repo) Switch(input SwitchInput) (*SwitchOutput, error) {
 		conflict = &SwitchConflict{}
 	}
 
-	if err := repo.migrate(changes, idx, !input.SkipWorkDir, conflict); err != nil {
+	if err := repo.migrate(changes, idx, input.UpdateWorkDir, conflict); err != nil {
 		return nil, err
 	}
 

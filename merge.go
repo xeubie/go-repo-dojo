@@ -1236,8 +1236,7 @@ func (repo *Repo) Merge(input MergeInput) (MergeOutput, error) {
 			return MergeOutput{}, errors.New("target oid not found")
 		}
 		removeMergeState(repo)
-		_, err := repo.Switch(SwitchInput{
-			Kind:   SwitchKindReset,
+		_, err := repo.ResetDir(ResetInput{
 			Target: OIDValue{OID: targetOID},
 			Force:  true,
 		})

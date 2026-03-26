@@ -314,11 +314,11 @@ func runCommand(opts RepoOpts, cmd *command, cwdPath string, runOpts RunOpts) er
 			return ErrRepoNotFound
 		}
 
-		result, err := repo.Switch(SwitchInput{
-			Kind:            kind,
-			Target:          cmd.Switch.Target,
-			SkipWorkDir: preserveWorkDir,
-			Force:           cmd.Switch.Force,
+		result, err := repo.switchDir(switchInput{
+			Kind:          kind,
+			Target:        cmd.Switch.Target,
+			UpdateWorkDir: !preserveWorkDir,
+			Force:         cmd.Switch.Force,
 		})
 		if err != nil {
 			return err
