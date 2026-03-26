@@ -134,7 +134,7 @@ func refOrOidFromDb(content string, hashKind HashKind) RefOrOid {
 		}
 		return RefValue{Ref: *ref}
 	}
-	if isHexString(content) && (len(content) == 40 || len(content) == 64) {
+	if len(content) == hashKind.HexLen() && isHexString(content) {
 		h, err := hashKind.HashFromHex(content)
 		if err != nil {
 			return nil
