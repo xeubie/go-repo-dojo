@@ -342,8 +342,9 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("open repo failed: %v", err)
 			}
-			result, err := repo.SwitchDir(SwitchInput{
-				Target: OIDValue{OID: commit1},
+			result, err := repo.Switch(SwitchInput{
+				Target:        OIDValue{OID: commit1},
+	
 			})
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
@@ -372,8 +373,9 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("open repo failed: %v", err)
 			}
-			result, err := repo.SwitchDir(SwitchInput{
-				Target: OIDValue{OID: commit1},
+			result, err := repo.Switch(SwitchInput{
+				Target:        OIDValue{OID: commit1},
+	
 			})
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
@@ -394,8 +396,9 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("open repo failed: %v", err)
 			}
-			result, err := repo.SwitchDir(SwitchInput{
-				Target: OIDValue{OID: commit1},
+			result, err := repo.Switch(SwitchInput{
+				Target:        OIDValue{OID: commit1},
+	
 			})
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)
@@ -424,8 +427,9 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("open repo failed: %v", err)
 			}
-			result, err := repo.SwitchDir(SwitchInput{
-				Target: OIDValue{OID: commit1},
+			result, err := repo.Switch(SwitchInput{
+				Target:        OIDValue{OID: commit1},
+	
 			})
 			if err != nil {
 				t.Fatalf("switch failed: %v", err)

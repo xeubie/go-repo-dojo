@@ -316,8 +316,8 @@ func (r *Repo) Head() (RefOrOid, error) {
 	return result, nil
 }
 
-// SwitchDir switches HEAD, the index, and the working directory to a new target.
-func (r *Repo) SwitchDir(input SwitchInput) (*SwitchOutput, error) {
+// Switch switches HEAD, the index, and the working directory to a new target.
+func (r *Repo) Switch(input SwitchInput) (*SwitchOutput, error) {
 	return r.switchDir(switchInput{
 		Kind:          SwitchKindSwitch,
 		Target:        input.Target,
